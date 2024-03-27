@@ -6,7 +6,7 @@ function App() {
   const handleClick = async () => {
     try {
       const response = await fetch('/get-movie/1000001'); // Adjust the movie ID as needed
-      const data = await response.json();
+      const data = await response.json(); // this is where the error is bc its not json
       console.log(data); // Log the movie data to the console
     } catch (error) {
       console.error('Error fetching movie data:', error);
@@ -23,4 +23,3 @@ function App() {
 }
 
 export default App;
-
