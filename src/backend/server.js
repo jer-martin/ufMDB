@@ -2,6 +2,9 @@ const express = require('express');
 const app = express();
 const oracledb = require('oracledb');
 const path = require('path');
+const cors = require('cors');
+
+app.use(cors());
 
 const PORT = process.env.PORT || 8000;
 
