@@ -12,7 +12,9 @@ function App() {
   });
   const [movieData, setMovieData] = useState(null);
   const [rolePercentages, setRolePercentages] = useState([]);
-
+  const [selectedRoles, setSelectedRoles] = useState([]);
+  
+  
   
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -38,7 +40,7 @@ function App() {
     try {
       const response = await fetch(`/get-barbie`);
       const data = await response.json();
-      console.log(data);
+      // console.log(data);
     } catch (error) {
       console.error('Error fetching movie data:', error);
     }
@@ -46,7 +48,6 @@ function App() {
 
 
 
-  const [selectedRoles, setSelectedRoles] = useState([]);
 
   const roles=["Additional directing","Additional photography","Art direction","Assistant director","Camera operator","Casting","Choreography","Cinematography",
   "Co-director","Composer","Costume design","Director","Editor","Executive producer","Hairstyling","Lighting","Makeup","Original writer","Producer","Production design",
@@ -56,32 +57,44 @@ function App() {
 
   const handleRoleClick = (role) => {
     setSelectedRoles(prev => {
-      const isAlreadySelected = prev.includes(role);
-      return isAlreadySelected ? prev.filter(r => r !== role) : [...prev, role];
+        const isAlreadySelected = prev.includes(role);
+        if (isAlreadySelected) {
+            // Find index of the role to remove it and its corresponding percentage
+            const index = prev.indexOf(role);
+            setRolePercentages(prevPercentages => prevPercentages.filter((_, i) => i !== index));
+            return prev.filter(r => r !== role);
+        } else {
+            // Add new role and fetch its percentage
+            fetchAverageRolePercentage(role).then(percentage => {
+                setRolePercentages(prevPercentages => [...prevPercentages, percentage]);
+            });
+            return [...prev, role];
+        }
     });
-  };
+};
+
 
   const onRoleSelect = useCallback((selectedRoles) => {
-    console.log('Selected roles:', selectedRoles); // use selectedRoles as needed to pass to the SQL query
+    // console.log('Selected roles:', selectedRoles); // use selectedRoles as needed to pass to the SQL query
   }, []);
 
-  useEffect(() => {
-    onRoleSelect(selectedRoles);
-  }, [selectedRoles, onRoleSelect]);
+  
 
   const displaySelectedRoles = selectedRoles.length > 0 ? selectedRoles.join(', ') : 'Select Roles';
 
   const clearSelectedRoles = () => {
     setSelectedRoles([]);
+    setRolePercentages([]); 
   };
 
   const fetchAverageRolePercentage = async (roleName) => {
     const url = `/get-average-role-percentage/${encodeURIComponent(roleName)}`;
-    console.log("Fetching URL:", url);
+    // console.log("Fetching URL:", url);
     try {
       const response = await fetch(url);
-      console.log("Response status:", response.status);
+      // console.log("Response status:", response.status);
       const data = await response.json();
+      // console.log("Data:", data);
       return data;
     } catch (error) {
       console.error('Error fetching average role percentage:', error);
@@ -90,15 +103,36 @@ function App() {
   };
 
   const handleMultipleRoles = async () => {
+    // Start fetching percentages for all selected roles
     const rolePromises = selectedRoles.map(role => fetchAverageRolePercentage(role));
-    const results = await Promise.all(rolePromises);
-    setRolePercentages(results.map(result => result.average_role_percentage));
-    console.log('Role percentages:', results);
-}
+    try {
+      // Wait for all promises to settle
+      const results = await Promise.all(rolePromises);
+  
+      // Assuming each result is a flat array with a single percentage value
+      const percentages = results.flat(); // This will flatten the array of arrays into a single array
+      setRolePercentages(percentages); // Update state with the new percentages
+      // console.log('Role percentages:', percentages);
+    } catch (error) {
+      console.error('Error fetching data for multiple roles:', error);
+    }
+  };
 
-// TODO: find why rolePercentage is undefined and fix it
-        // Role percentages: (2)[Array(1), Array(1)]
-        // this shit is honestly so annoying
+  const handlePopularityClick = async () => {
+    const movieID = `${encodeURIComponent(formData.movieID)}`;
+    const url = `/get-movie-popularity/${movieID}`;
+    try {
+      console.log('Fetching URL:', url);
+      const response = await fetch(url);
+      const data = await response.json();
+      setMovieData(data);
+      console.log(data);
+    } catch (error) {
+      console.error('Error fetching movie popularity:', error);
+    }
+  }
+
+
   
   return (
     <div className="App">
@@ -158,17 +192,42 @@ function App() {
         
         {rolePercentages && rolePercentages.length > 0 && (
   <Flex direction="column" alignItems="center" mt="4">
-    {rolePercentages.map((rolePercentage, index) => {
-      console.log("Role Percentage:", rolePercentage);
+    {rolePercentages.map((percentage, index) => {
+      // Ensure 'percentage' is a number and not undefined
+      const formattedPercentage = typeof percentage === 'number' ? percentage.toFixed(2) : 'N/A';
+
       return (
         <Text key={index} fontSize="md">
-          Role {selectedRoles[index]}: {rolePercentage && rolePercentage[0] !== undefined ? rolePercentage[0].toFixed(2) : 'N/A'}%
+          Percent of crew labelled "{selectedRoles[index]}" : {formattedPercentage}%
         </Text>
       );
     })}
   </Flex>
 )}
 
+        <Flex direction="column" alignItems="center" mt="4">
+          <Input
+            name="movieID"
+            placeholder="Enter a movie ID"
+            value={formData.movieID}
+            onChange={handleChange}
+            width="240px"
+            mb="4"
+          />
+          <Button
+            colorScheme="teal"
+            onClick={handlePopularityClick}
+          >
+            Get Movie Popularity
+          </Button>
+          {movieData && movieData.length > 0 && (
+            <Flex direction="column" alignItems="center" mt="4">
+              <Text fontSize="md">Movie ID: {movieData[0].movieId}</Text>
+              <Text fontSize="md">Movie Name: {movieData[0].movieName}</Text>
+              <Text fontSize="md">Popularity: {movieData[0].popularity.toFixed(2)}</Text>
+            </Flex>
+          )}
+        </Flex>
 
 
       </div>

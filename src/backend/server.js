@@ -67,12 +67,67 @@ app.get('/get-average-role-percentage/:roleName', async (req, res) => {
     const result = await conn.execute(sql, [roleName], { outFormat: oracledb.OUT_FORMAT_OBJECT });
     console.log('Result:', result);
     if (result.rows.length > 0) {
-      const percentages = result.rows.map(row => row.AVERAGE_ROLE_PERCENTAGE);
-      res.json(percentages); // Directly send percentages as top-level array
+      // Directly send percentages as top-level array of single values
+      const percentages = result.rows.map(row => row.AVERAGE_ROLE_PERCENTAGE || 0); // Ensuring no undefined values
+      res.json(percentages); // Send as an object for clearer structure
     } else {
       res.status(404).send('No data found');
     }
   } catch (err) {
+    console.error('Error executing query:', err);
+    res.status(500).send('Internal Server Error');
+  } finally {
+    if (conn) {
+      await conn.close();
+    }
+  }
+});
+
+app.get('/get-movie-popularity/:movieId', async (req, res) => {
+  const { movieId } = req.params;
+  // const movieId = 1000001;
+
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
+
+    const sql = `
+    SELECT 
+    movie_id,
+    movie_name,
+    popularity
+    FROM (
+        SELECT 
+            m.id AS movie_id,
+            m.name AS movie_name,
+            (COUNT(r.id) + (2 * m.rating)) AS popularity
+        FROM 
+            movies m
+        LEFT JOIN 
+            releases r ON m.id = r.id
+        GROUP BY 
+            m.id, m.name, m.rating
+    ) t
+    WHERE
+        popularity IS NOT NULL
+        AND movie_id = :movieId
+    ORDER BY
+        popularity DESC`;
+
+        console.log("Executing SQL:", sql);
+        console.log("With parameters:", { movieId });
+
+    const result = await conn.execute(sql, [movieId], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    console.log('Result:', result);
+    if (result.rows.length > 0) {
+      const moviePopularity = result.rows.map(row => ({
+        movieId: row.MOVIE_ID,  // Accessing the MOVIE_ID property
+        movieName: row.MOVIE_NAME,  // Accessing the MOVIE_NAME property
+        popularity: ((row.POPULARITY - 3.38) / (164.7 - 3.38)) * 10  // Normalizing the POPULARITY property to be between 0 and 10
+      }));
+      console.log('Movies:', moviePopularity);
+      res.json(moviePopularity);  // Sending the array of movie objects
+  }} catch (err) {
     console.error('Error executing query:', err);
     res.status(500).send('Internal Server Error');
   } finally {
