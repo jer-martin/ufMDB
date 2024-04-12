@@ -1,7 +1,7 @@
 import logo from './logo.svg';
 import './App.css';
 import Nav from './components/Nav';
-import { Button, Input, Text, Flex, Menu, MenuButton, MenuItem, MenuList, Icon, Tooltip} from '@chakra-ui/react'; // Ensure Chakra UI imports are here
+import { Button, Input, Text, Flex, Menu, MenuButton, MenuItem, MenuList, Icon, Tooltip, Divider} from '@chakra-ui/react'; // Ensure Chakra UI imports are here
 import { ChevronDownIcon, DeleteIcon, CheckCircleIcon } from '@chakra-ui/icons'; // Ensure Chakra UI imports are here
 import React, { useState, useCallback, useEffect } from 'react';
 import { CgArrowsExpandDownRight } from "react-icons/cg";
@@ -188,7 +188,7 @@ function App() {
 
         </Flex>
 
-
+        
         
         {rolePercentages && rolePercentages.length > 0 && (
   <Flex direction="column" alignItems="center" mt="4">
@@ -204,6 +204,9 @@ function App() {
     })}
   </Flex>
 )}
+      <Text fontSize="xs" mt="4" color={'grey'}> If the percentage is N/A, click the checkmark.</Text>
+
+      <Divider orientation="horizontal" mt="4" width={'30%'} />
 
         <Flex direction="column" alignItems="center" mt="4">
           <Input
