@@ -1,40 +1,36 @@
-
-
 .App {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh; /* Ensures the App fills the full height of the viewport */
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.Nav { /* Assuming this class for Nav */
+  position: fixed; /* Fixes Nav at the top */
+  top: 0;
+  width: 100%; /* Ensures Nav spans the full width */
+  z-index: 1000; /* Keeps Nav above other content */
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
+.App-area {
+  flex-grow: 1; /* Takes up remaining space */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-top: 60px; /* Adjust based on Nav height to prevent overlap */
   background-color: #282c34;
-  min-height: 100vh;
+  color: white;
+  font-size: calc(10px + 2vmin);
+}
+
+.App-body {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   font-size: calc(10px + 2vmin);
   color: white;
+  background-color: #282c34;
 }
 
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}

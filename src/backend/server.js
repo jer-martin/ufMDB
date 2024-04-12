@@ -5,6 +5,7 @@ const path = require('path');
 const cors = require('cors');
 
 app.use(cors());
+app.use(express.json());
 
 const PORT = process.env.PORT || 8000;
 
@@ -45,8 +46,45 @@ const config = {
         await conn.close();
       }
     }
-  }
+}
 
+app.get('/get-average-role-percentage/:roleName', async (req, res) => {
+  const { roleName } = req.params;
+
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
+
+    const sql = `
+      SELECT AVG(role_percentage) AS average_role_percentage
+      FROM (
+        SELECT
+          100.0 * COUNT(CASE WHEN c.role = :roleName THEN 1 END) / NULLIF(COUNT(*), 0) AS role_percentage
+        FROM crew c
+        GROUP BY c.id
+      )`;
+
+    const result = await conn.execute(sql, [roleName], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    console.log('Result:', result);
+    if (result.rows.length > 0) {
+      const percentages = result.rows.map(row => row.AVERAGE_ROLE_PERCENTAGE);
+      res.json(percentages); // Directly send percentages as top-level array
+    } else {
+      res.status(404).send('No data found');
+    }
+  } catch (err) {
+    console.error('Error executing query:', err);
+    res.status(500).send('Internal Server Error');
+  } finally {
+    if (conn) {
+      await conn.close();
+    }
+  }
+});
+
+
+ 
+  
 app.get('/get-movie/:movieId', async (req, res) => {
   const { movieId } = req.params;
 
@@ -77,6 +115,9 @@ app.get('*', (req, res) => {
 app.get('/api/test', async (req, res) => {
   res.json({ message: 'Hello from the server!' });
 })
+
+
+
 
 async function run() {
   let connection;
