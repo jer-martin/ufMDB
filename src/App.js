@@ -1,10 +1,94 @@
 import logo from './logo.svg';
 import './App.css';
 import Nav from './components/Nav';
-import { Button, Input, Text, Flex, Menu, MenuButton, MenuItem, MenuList, Icon, Tooltip, Divider} from '@chakra-ui/react'; // Ensure Chakra UI imports are here
-import { ChevronDownIcon, DeleteIcon, CheckCircleIcon } from '@chakra-ui/icons'; // Ensure Chakra UI imports are here
+import { Button, Input, Text, Flex, Menu, MenuButton, MenuItem, MenuList, Icon, Tooltip, Divider, Box} from '@chakra-ui/react'; // Ensure Chakra UI imports are here
+import { ChevronDownIcon, DeleteIcon, CheckCircleIcon, WarningIcon, QuestionIcon} from '@chakra-ui/icons'; // Ensure Chakra UI imports are here
 import React, { useState, useCallback, useEffect } from 'react';
 import { CgArrowsExpandDownRight } from "react-icons/cg";
+import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Filler, Legend, TimeScale } from 'chart.js';
+import { Line } from 'react-chartjs-2';
+import { Tooltip as ChartTooltip } from 'chart.js';
+import { keyframes } from '@emotion/react';
+import { adapterDateFns } from 'chartjs-adapter-date-fns';
+
+// Define a shake animation
+const shake = keyframes`
+  10%, 90% {
+    transform: translateX(-1px);
+  }
+  
+  20%, 80% {
+    transform: translateX(2px);
+  }
+
+  30%, 50%, 70% {
+    transform: translateX(-4px);
+  }
+
+  40%, 60% {
+    transform: translateX(4px);
+  }
+`;
+
+Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Filler, Legend, ChartTooltip, TimeScale);
+
+
+const options = {
+  responsive: true,
+  scales: {
+    x: {
+      type: 'time',
+      time: {
+        unit: 'year',  // Can be set to 'year', 'month', etc.
+        parser: 'yyyy',  // Format of the year
+        tooltipFormat: 'yyyy',  // Format of the tooltip
+        displayFormats: {
+          year: 'yyyy'  // Format of the year label
+        }  
+      },
+      title: {
+        display: true,
+        text: 'Year'
+      }
+    },
+    y: {
+      beginAtZero: true,
+      title: {
+        display: true,
+        text: 'Average Value'
+      }
+    }
+  },
+  plugins: {
+    legend: {
+      display: true
+    },
+    tooltip: {
+      enabled: true,
+      mode: 'index',
+      intersect: false
+    }
+  }
+};
+
+const createChartData = (genreData) => {
+  const datasets = genreData.map((genreArray, index) => {
+    const color = `hsl(${index * 360 / genreData.length}, 100%, 50%)`;
+    return {
+      label: genreArray[0].genre,
+      data: genreArray.map(d => ({
+        x: new Date(d.year.toString()), // Convert year to Date object
+        y: (d.avgNumLanguages + d.avgRating) / 2,
+      })),
+      borderColor: color,
+      backgroundColor: color,
+    };
+  });
+
+  return {
+    datasets,
+  };
+};
 
 function App() {
   const [formData, setFormData] = useState({
@@ -13,6 +97,10 @@ function App() {
   const [movieData, setMovieData] = useState(null);
   const [rolePercentages, setRolePercentages] = useState([]);
   const [selectedRoles, setSelectedRoles] = useState([]);
+  const [genrePercentages, setGenrePercentages] = useState([]);
+  const [selectedGenres, setSelectedGenres] = useState([]);
+  const [hasError, setHasError] = useState(false);
+  const [diversityGenreData, setDiversityGenreData] = useState([]);
   
   
   
@@ -24,34 +112,20 @@ function App() {
     });
   };
 
-  const handleClick = async () => {
-    const movieID = formData.movieID;
-
-    try {
-      const response = await fetch(`/get-movie/${movieID}`);
-      const data = await response.json();
-      setMovieData(data);
-    } catch (error) {
-      console.error('Error fetching movie data:', error);
-    }
-  };
-
-  const barbieClick = async () => {
-    try {
-      const response = await fetch(`/get-barbie`);
-      const data = await response.json();
-      // console.log(data);
-    } catch (error) {
-      console.error('Error fetching movie data:', error);
-    }
-  };
-
-
-
 
   const roles=["Additional directing","Additional photography","Art direction","Assistant director","Camera operator","Casting","Choreography","Cinematography",
   "Co-director","Composer","Costume design","Director","Editor","Executive producer","Hairstyling","Lighting","Makeup","Original writer","Producer","Production design",
   "Set decoration","Sound","Special effects","Stunts","Title design","Visual effects","Writer"];
+
+  const genres = [
+    "Adventure","Action","Romance","Comedy","Horror","TV Movie","Science Fiction","Animation","Mystery","Western","Documentary",
+    "Thriller","Music","History","War","Fantasy","Crime","Drama","Family"
+  ];
+
+  const displaySelectedRoles = selectedRoles.length > 0 ? selectedRoles.join(', ') : 'Select Roles';
+
+  const displaySelectedGenres = selectedGenres.length > 0 ? selectedGenres.join(', ') : 'Select Genres';
+
 
 
 
@@ -73,14 +147,38 @@ function App() {
     });
 };
 
+const handleGenreClick = (genre) => {
+  setSelectedGenres(prevGenres => {
+    if (prevGenres.includes(genre)) {
+      // If the genre is already selected, remove it from the array
+      return prevGenres.filter(g => g !== genre);
+    } else {
+      // If the genre is not selected, add it to the array
+      return [...prevGenres, genre];
+    }
+  });
+};
+
+
 
   const onRoleSelect = useCallback((selectedRoles) => {
     // console.log('Selected roles:', selectedRoles); // use selectedRoles as needed to pass to the SQL query
+    // pretty sure this is deprecated now
   }, []);
 
+  useEffect(() => {
+    if (hasError) {
+      // Set a timer to clear the error state
+      const timer = setTimeout(() => {
+        setHasError(false);
+      }, 1300); // 820ms matches the animation duration or any other appropriate delay
   
+      // Cleanup the timer when the component unmounts or hasError changes again
+      return () => clearTimeout(timer);
+    }
+  }, [hasError]);
 
-  const displaySelectedRoles = selectedRoles.length > 0 ? selectedRoles.join(', ') : 'Select Roles';
+  
 
   const clearSelectedRoles = () => {
     setSelectedRoles([]);
@@ -130,7 +228,46 @@ function App() {
     } catch (error) {
       console.error('Error fetching movie popularity:', error);
     }
-  }
+  };
+
+
+  const handleDiversityClick = async (genreName) => {
+    const genre = `${encodeURIComponent(genreName)}`;
+    const url = `/get-diversity/${genre}`;
+    try {
+      console.log('Fetching URL:', url);
+      const response = await fetch(url);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching movie popularity:', error);
+    }
+  };
+
+  const handleMultipleGenresDiversity = async () => {
+    // start fetching percentages for all selected genres
+    const genrePromises = selectedGenres.map(genre => handleDiversityClick(genre));
+    // the response will be an array with year, avgNumLanguages, avgRating, and genre
+    try {
+      const results = await Promise.all(genrePromises);
+      console.log('Results:', results);
+      setDiversityGenreData(results);
+      const chartData = createChartData(results);
+    } catch (error) {
+      console.error('Error fetching data for multiple genres:', error);
+    }
+  };
+  
+
+
+  
+  const DiversityChart = ({ genreData }) => {
+    const chartData = createChartData(genreData);
+  
+    return <Line data={chartData} options={options} />;
+  };
+  
+  
 
 
   
@@ -191,19 +328,20 @@ function App() {
         
         
         {rolePercentages && rolePercentages.length > 0 && (
-  <Flex direction="column" alignItems="center" mt="4">
-    {rolePercentages.map((percentage, index) => {
-      // Ensure 'percentage' is a number and not undefined
-      const formattedPercentage = typeof percentage === 'number' ? percentage.toFixed(2) : 'N/A';
+          <Flex direction="column" alignItems="center" mt="4">
+            {rolePercentages.map((percentage, index) => {
+              // Ensure 'percentage' is a number and not undefined
+              const formattedPercentage = typeof percentage === 'number' ? percentage.toFixed(2) : 'N/A';
 
-      return (
-        <Text key={index} fontSize="md">
-          Percent of crew labelled "{selectedRoles[index]}" : {formattedPercentage}%
-        </Text>
-      );
-    })}
-  </Flex>
-)}
+              return (
+                <Text key={index} fontSize="md">
+                  Percent of crew labelled "{selectedRoles[index]}" : {formattedPercentage}%
+                </Text>
+              );
+            })}
+          </Flex>
+        )}
+
       <Text fontSize="xs" mt="4" color={'grey'}> If the percentage is N/A, click the checkmark.</Text>
 
       <Divider orientation="horizontal" mt="4" width={'30%'} />
@@ -229,6 +367,96 @@ function App() {
               <Text fontSize="md">Movie Name: {movieData[0].movieName}</Text>
               <Text fontSize="md">Popularity: {movieData[0].popularity.toFixed(2)}</Text>
             </Flex>
+          )}
+        </Flex>
+
+      <Divider orientation="horizontal" mt="4" width={'30%'} />
+
+        <Flex direction="column" alignItems="center" mt="4">
+
+            <Flex direction="row" alignItems="center" justifyContent="center">
+                <Box w={'auto'} h={'auto'}>
+                  <Text fontSize="md" color={'white'}>Does diversity have a bearing on popularity?</Text>
+                  <Text fontSize="xs" color={'grey'}>Choose any number of genres, let's find out!</Text>
+                </Box>
+                <Tooltip label="Diversity (in this case) refers to the variety of languages used in films, which, when compared to their average ratings, can indicate a correlation between a film's linguistic diversity and its perceived quality or appeal." placement="top-start">
+                  <Icon
+                    as={QuestionIcon}
+                    w={5}
+                    h={5}
+                    color={'white'}
+                    _hover={{transform: 'scale(1.2)', color: 'LightBlue'}}
+                    sx={{ marginLeft: '10px' }}
+                    onClick={() => setSelectedGenres([])}
+                  />
+                </Tooltip>
+            </Flex>
+            
+            <Box w={4} h={3} /> {/* Spacer */}
+
+            <Flex direction="row" alignItems="center" justifyContent="center">
+              <Menu>
+                  <MenuButton
+                    as={Button}
+                    rightIcon={<ChevronDownIcon />}
+                    width="auto"
+                    minWidth="240px"
+                  >
+                    {displaySelectedGenres}
+                  </MenuButton>
+                <MenuList sx={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {genres.map(genre => (
+                    <MenuItem
+                      key={genre}
+                      onClick={() => handleGenreClick(genre)}
+                      sx={{ color: 'black', fontSize: '12pt' }}
+                      background={selectedGenres.includes(genre) ? 'gray.200' : 'white'}
+                      closeOnSelect={false}
+                    >
+                      {genre}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Menu>
+              <Tooltip label="Clear all selected genres" placement="top-start">
+                  <Icon
+                    as={DeleteIcon}
+                    w={5}
+                    h={5}
+                    color={'white'}
+                    _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
+                    sx={{ marginLeft: '10px' }}
+                    onClick={() => setSelectedGenres([])}
+                  />
+              </Tooltip>
+              <Tooltip label="Find diversity-popularity metric for selected genres" placement="top-start">
+                  <Icon
+                    as={CheckCircleIcon}
+                    w={5}
+                    h={5}
+                    color={hasError ? 'IndianRed' : 'white'}
+                    _hover={{ color: 'LightGreen', transform: 'scale(1.2)' }}
+                    sx={{
+                      marginLeft: '10px',
+                      animation: hasError ? `${shake} 0.82s cubic-bezier(.36,.07,.19,.97) both` : 'none',
+                      _hover: {
+                          color: hasError ? 'IndianRed' : 'LightGreen',  // Conditional hover color
+                          transform: 'scale(1.2)'
+                      }
+                    }}
+                    onClick={() => handleMultipleGenresDiversity()}
+                  />
+              </Tooltip>
+            </Flex>
+
+
+
+
+        </Flex>
+
+        <Flex direction="column" alignItems="center" mt="4" style={{ width: '800px', height: '400px'}}>
+          {diversityGenreData && diversityGenreData.length > 0 && (
+            <DiversityChart genreData={diversityGenreData} />
           )}
         </Flex>
 

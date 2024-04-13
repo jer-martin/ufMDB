@@ -9,11 +9,17 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8000;
 
-app.use(express.static(path.join(__dirname, '../../build')));
+
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+app.use((req, res, next) => {
+  console.log('Incoming request:', req.method, req.path);
+  next();
+});
+
 
 const config = {
     user: 'jeremymartin',
@@ -21,31 +27,71 @@ const config = {
     connectString: 'oracle.cise.ufl.edu:1521/orcl'
   };
 
-  
-  async function getMovie (movieId) {
-    let conn
+const getDiversity = async (genre) => {
+  console.log('executing getDiversity with genre:', genre);
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
 
-    try {
+    const sql = `
+      WITH ReleaseCounts AS (
+        SELECT
+            m.id AS movie_id,
+            COUNT(r.id) AS num_releases,
+            r.rdate as releasedate
+        FROM
+            jeremymartin.movies m
+        JOIN jeremymartin.releases r ON r.id = m.id
+        GROUP BY
+            m.id, r.rdate
+      )
+      SELECT 
+          year,
+          AVG(num_languages) AS avg_num_languages,
+          AVG(rating) AS avg_rating,
+          gen
+      FROM 
+          (SELECT 
+              m.id,
+              m.year,
+              m.rating,
+              COUNT(DISTINCT l.language) AS num_languages,
+              g.genre AS gen
+          FROM 
+              jeremymartin.movies m
+          JOIN 
+              jeremymartin.languages l ON m.id = l.id
+          JOIN
+              jeremymartin.genres g ON g.id = m.id
+          JOIN 
+              ReleaseCounts RC ON RC.movie_id = m.id
+          WHERE 
+              g.genre = :genre
+          GROUP BY 
+              m.id, m.year, m.rating, g.genre)
+      WHERE
+          year > 1940 AND year < 2023 AND
+          rating IS NOT NULL
+      GROUP BY 
+          year, gen
+      ORDER BY 
+          year`;
 
-      conn = await oracledb.getConnection(config);
-
-      const result = await conn.execute(
-        `SELECT * FROM Movies WHERE id = :id`,
-        [movieId]
-      );
-
-      // console.log(result.rows);
-      // await conn.close();
-      return result.rows; // now need to have it close the connection somehow
-
-
-    } catch (err) {
-      console.error('Caught an error!' , err);
-    } finally {
-      if (conn) {
-        await conn.close();
-      }
+    const result = await conn.execute(sql, [genre], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    return result.rows.map(row => ({
+      year: row.YEAR,
+      avgNumLanguages: row.AVG_NUM_LANGUAGES,
+      avgRating: row.AVG_RATING,
+      genre: row.GEN
+    }));
+  } catch (err) {
+    console.error('Error executing query:', err);
+    throw err;
+  } finally {
+    if (conn) {
+      await conn.close();
     }
+  }
 }
 
 app.get('/get-average-role-percentage/:roleName', async (req, res) => {
@@ -83,6 +129,8 @@ app.get('/get-average-role-percentage/:roleName', async (req, res) => {
   }
 });
 
+
+// this is literally just getting popularity
 app.get('/get-movie-popularity/:movieId', async (req, res) => {
   const { movieId } = req.params;
   // const movieId = 1000001;
@@ -163,15 +211,35 @@ app.get('/get-barbie', async (req, res) => {
   }
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../build', 'index.html'));
-});
+
 
 app.get('/api/test', async (req, res) => {
   res.json({ message: 'Hello from the server!' });
 })
 
 
+// here are the important queries
+
+// vedic first
+
+app.get('/get-diversity/:genre', async (req, res) => {
+  console.log('req.params:', req.params);
+  const { genre } = req.params;
+  console.log('genre:', genre);
+
+  try {
+    const diversityData = await getDiversity(genre);
+    res.json(diversityData); // Send the movie data back to the frontend
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DO NOT MOVE THIS. DO NOT PUT ANY OTHER ROUTES BELOW THIS, IT WILL BREAK THE WHOLE THING
+app.use(express.static(path.join(__dirname, '../../build')));       
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../build', 'index.html'));
+});
 
 
 async function run() {
@@ -180,13 +248,13 @@ async function run() {
   try {
     // connection = await oracledb.getConnection(config);
 
-    const movieData = await getMovie(1000001);
-    console.log('Movie data fetched:\n', movieData);
     // await conn.close();
     // const result = await connection.execute(
     //   `SELECT * FROM Movies WHERE id = :id`,
     //   [1000001]
     // );
+    // const result = await getDiversity('Action');
+    // console.log(result);
 
     // console.log(result.rows);
 
