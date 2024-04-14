@@ -94,6 +94,74 @@ const getDiversity = async (genre) => {
   }
 }
 
+const getGenreComplexities = async (genre) => {
+  console.log('executing getGenreComplexities with genre:', genre);
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
+
+    const sql = `
+      WITH mgt(id, name, m_cplx, genre, theme_count, rating, rdate, genre_count, rn) AS (
+        SELECT m.id, m.name, (t.tc * (m.rating / 5)), g.genre, t.tc, m.rating, r.rdate, gc.gc,
+        ROW_NUMBER() OVER (PARTITION BY g.genre ORDER BY r.rdate DESC) AS rn
+        FROM jeremymartin.movies m 
+        JOIN (
+            SELECT DISTINCT id, MIN(rdate) AS rdate
+            FROM jeremymartin.releases 
+            GROUP BY id
+        ) r ON m.id = r.id
+        JOIN (
+            SELECT DISTINCT id, genre
+            FROM jeremymartin.genres 
+            GROUP BY id, genre
+        ) g ON m.id = g.id
+        JOIN (
+            SELECT  id, COUNT(DISTINCT theme) AS tc
+            FROM jeremymartin.themes
+            GROUP BY id
+        ) t on m.id = t.id
+        JOIN (
+            SELECT id, COUNT(DISTINCT genre) AS gc
+            FROM jeremymartin.genres 
+            GROUP BY id
+        ) gc ON m.id = gc.id
+        WHERE m.rating IS NOT NULL AND t.tc IS NOT NULL
+    ), 
+    ema (name, rdate, genre, m_cplx, rn, g_cplx) AS (
+        SELECT name, rdate, genre, m_cplx, rn, m_cplx 
+        FROM mgt
+        WHERE rn = 1
+        UNION ALL
+        SELECT m.name, m.rdate, m.genre, m.m_cplx, m.rn, 
+        (2/m.rn)*(m.m_cplx - e.g_cplx) + e.g_cplx 
+        FROM mgt m, ema e 
+        WHERE m.rn = e.rn + 1 AND m.genre = e.genre
+    )
+    SELECT name, rdate, genre, m_cplx, g_cplx
+    FROM ema
+    WHERE genre = :genre
+    ORDER BY rdate DESC
+          `;
+
+    const result = await conn.execute(sql, [genre], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    console.log('Result:', result);
+    return result.rows.map(row => ({
+      genre: row.GENRE,
+      rdate: row.RDATE,
+      movie: row.NAME,
+      movie_complexity: row.M_CPLX,
+      genre_complexity: row.G_CPLX
+    }));
+  } catch (err) {
+    console.error('Error executing query:', err);
+    throw err;
+  } finally {
+    if (conn) {
+      await conn.close();
+    }
+  }
+}
+
 app.get('/get-average-role-percentage/:roleName', async (req, res) => {
   const { roleName } = req.params;
 
@@ -230,6 +298,20 @@ app.get('/get-diversity/:genre', async (req, res) => {
   try {
     const diversityData = await getDiversity(genre);
     res.json(diversityData); // Send the movie data back to the frontend
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/get-genre-complexity/:genre', async (req, res) => {
+  console.log('req.params:', req.params);
+  const { genre } = req.params;
+  console.log('genre:', genre);
+
+  try {
+    const GCData = await getGenreComplexities(genre);
+    console.log('GCData:', GCData);
+    res.json(GCData); // Send the movie data back to the frontend
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }

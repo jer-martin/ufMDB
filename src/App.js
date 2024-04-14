@@ -33,7 +33,7 @@ const shake = keyframes`
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Filler, Legend, ChartTooltip, TimeScale);
 
 
-const options = {
+const optionsDiversity = {
   responsive: true,
   scales: {
     x: {
@@ -71,14 +71,73 @@ const options = {
   }
 };
 
-const createChartData = (genreData) => {
+const optionsGC = {
+  responsive: true,
+  scales: {
+    x: {
+      type: 'time',
+      time: {
+        unit: 'day',  // Can be set to 'year', 'month', etc.
+        // parser: 'mm/dd/yyyy',  // Format of the year
+        tooltipFormat: 'MMM d, yyyy',  // Format of the tooltip
+        displayFormats: {
+          day: 'MMM d, yyyy'  // Format of the year label
+        }  
+      },
+      title: {
+        display: true,
+        text: 'Time'
+      }
+    },
+    y: {
+      beginAtZero: true,
+      title: {
+        display: true,
+        text: 'Genre Complexity'
+      }
+    }
+  },
+  plugins: {
+    legend: {
+      display: true
+    },
+    tooltip: {
+      enabled: true,
+      mode: 'index',
+      intersect: false
+    }
+  }
+};
+
+const createDiversityChartData = (genreData) => {
   const datasets = genreData.map((genreArray, index) => {
+    // console.log("genreArray[0]:  \n", genreArray[0])
     const color = `hsl(${index * 360 / genreData.length}, 100%, 50%)`;
     return {
       label: genreArray[0].genre,
       data: genreArray.map(d => ({
         x: new Date(d.year.toString()), // Convert year to Date object
         y: (d.avgNumLanguages + d.avgRating) / 2,
+      })),
+      borderColor: color,
+      backgroundColor: color,
+    };
+  });
+
+  return {
+    datasets,
+  };
+};
+
+const createGCChartData = (genreData) => {
+  const datasets = genreData.map((genreArray, index) => {
+    // console.log("genreArray[0]:  \n", genreArray[0])
+    const color = `hsl(${index * 360 / genreData.length}, 100%, 50%)`;
+    return {
+      label: genreArray[0].genre,
+      data: genreArray.map(d => ({
+        x: new Date(d.rdate), // Convert year to Date object
+        y: d.genre_complexity,
       })),
       borderColor: color,
       backgroundColor: color,
@@ -98,9 +157,11 @@ function App() {
   const [rolePercentages, setRolePercentages] = useState([]);
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [genrePercentages, setGenrePercentages] = useState([]);
-  const [selectedGenres, setSelectedGenres] = useState([]);
+  const [selectedDiversityGenres, setSelectedDiversityGenres] = useState([]);
+  const [selectedGCGenres, setSelectedGCGenres] = useState([]);
   const [hasError, setHasError] = useState(false);
   const [diversityGenreData, setDiversityGenreData] = useState([]);
+  const [genreComplexityData, setGenreComplexityData] = useState([]);
   
   
   
@@ -124,7 +185,9 @@ function App() {
 
   const displaySelectedRoles = selectedRoles.length > 0 ? selectedRoles.join(', ') : 'Select Roles';
 
-  const displaySelectedGenres = selectedGenres.length > 0 ? selectedGenres.join(', ') : 'Select Genres';
+  const displaySelectedGenres = selectedDiversityGenres.length > 0 ? selectedDiversityGenres.join(', ') : 'Select Genres';
+
+  const displaySelectedGCGenres = selectedGCGenres.length > 0 ? selectedGCGenres.join(', ') : 'Select Genres';
 
 
 
@@ -147,8 +210,20 @@ function App() {
     });
 };
 
-const handleGenreClick = (genre) => {
-  setSelectedGenres(prevGenres => {
+const handleDiversityGenreClick = (genre) => {
+  setSelectedDiversityGenres(prevGenres => {
+    if (prevGenres.includes(genre)) {
+      // If the genre is already selected, remove it from the array
+      return prevGenres.filter(g => g !== genre);
+    } else {
+      // If the genre is not selected, add it to the array
+      return [...prevGenres, genre];
+    }
+  });
+};
+
+const handleGenreComplexityClick = (genre) => {
+  setSelectedGCGenres(prevGenres => {
     if (prevGenres.includes(genre)) {
       // If the genre is already selected, remove it from the array
       return prevGenres.filter(g => g !== genre);
@@ -244,15 +319,42 @@ const handleGenreClick = (genre) => {
     }
   };
 
+  const handleGCClick = async (genreName) => {
+    const genre = `${encodeURIComponent(genreName)}`;
+    const url = `/get-genre-complexity/${genre}`; /// need to change this to get-genre-complexity or smthing
+    try {
+      console.log('Fetching URL:', url);
+      const response = await fetch(url);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching movie popularity:', error);
+    }
+  };
+
   const handleMultipleGenresDiversity = async () => {
     // start fetching percentages for all selected genres
-    const genrePromises = selectedGenres.map(genre => handleDiversityClick(genre));
+    const genrePromises = selectedDiversityGenres.map(genre => handleDiversityClick(genre));
     // the response will be an array with year, avgNumLanguages, avgRating, and genre
     try {
       const results = await Promise.all(genrePromises);
       console.log('Results:', results);
       setDiversityGenreData(results);
-      const chartData = createChartData(results);
+      const chartData = createDiversityChartData(results);
+    } catch (error) {
+      console.error('Error fetching data for multiple genres:', error);
+    }
+  };
+
+  const handleMultipleGenresComplexity = async () => {
+    // start fetching percentages for all selected genres
+    const genrePromises = selectedGCGenres.map(genre => handleGCClick(genre));
+    // the response will be an array with year, avgNumLanguages, avgRating, and genre
+    try {
+      const results = await Promise.all(genrePromises);
+      console.log('Results:', results);
+      setGenreComplexityData(results);
+      const chartData = createGCChartData(results);
     } catch (error) {
       console.error('Error fetching data for multiple genres:', error);
     }
@@ -262,9 +364,15 @@ const handleGenreClick = (genre) => {
 
   
   const DiversityChart = ({ genreData }) => {
-    const chartData = createChartData(genreData);
+    const chartData = createDiversityChartData(genreData);
   
-    return <Line data={chartData} options={options} />;
+    return <Line data={chartData} options={optionsDiversity} />;
+  };
+
+  const GCChart = ({ GCData }) => {
+    const chartData = createGCChartData(GCData);
+  
+    return <Line data={chartData} options={optionsGC} />;
   };
   
   
@@ -387,7 +495,7 @@ const handleGenreClick = (genre) => {
                     color={'white'}
                     _hover={{transform: 'scale(1.2)', color: 'LightBlue'}}
                     sx={{ marginLeft: '10px' }}
-                    onClick={() => setSelectedGenres([])}
+                    onClick={() => setSelectedDiversityGenres([])}
                   />
                 </Tooltip>
             </Flex>
@@ -408,9 +516,9 @@ const handleGenreClick = (genre) => {
                   {genres.map(genre => (
                     <MenuItem
                       key={genre}
-                      onClick={() => handleGenreClick(genre)}
+                      onClick={() => handleDiversityGenreClick(genre)}
                       sx={{ color: 'black', fontSize: '12pt' }}
-                      background={selectedGenres.includes(genre) ? 'gray.200' : 'white'}
+                      background={selectedDiversityGenres.includes(genre) ? 'gray.200' : 'white'}
                       closeOnSelect={false}
                     >
                       {genre}
@@ -426,7 +534,7 @@ const handleGenreClick = (genre) => {
                     color={'white'}
                     _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
                     sx={{ marginLeft: '10px' }}
-                    onClick={() => setSelectedGenres([])}
+                    onClick={() => setSelectedDiversityGenres([])}
                   />
               </Tooltip>
               <Tooltip label="Find diversity-popularity metric for selected genres" placement="top-start">
@@ -459,6 +567,96 @@ const handleGenreClick = (genre) => {
             <DiversityChart genreData={diversityGenreData} />
           )}
         </Flex>
+
+
+        <Divider orientation="horizontal" mt="4" width={'30%'} />
+          <Flex direction="column" alignItems="center" mt="4">
+
+              <Flex direction="row" alignItems="center" justifyContent="center">
+                  <Box w={'auto'} h={'auto'}>
+                    <Text fontSize="md" color={'white'}>Genre Complexity</Text>
+                    <Text fontSize="xs" color={'grey'}>Choose any number of genres to compare their complexity over time</Text>
+                  </Box>
+                  <Tooltip label="Complexity (in this case) refers to the number of themes movies in that genre explored along with how well the movies explored the themes." placement="top-start">
+                    <Icon
+                      as={QuestionIcon}
+                      w={5}
+                      h={5}
+                      color={'white'}
+                      _hover={{transform: 'scale(1.2)', color: 'LightBlue'}}
+                      sx={{ marginLeft: '10px' }}
+                      onClick={() => setSelectedGCGenres([])}
+                    />
+                  </Tooltip>
+              </Flex>
+              
+              <Box w={4} h={3} /> {/* Spacer */}
+
+              <Flex direction="row" alignItems="center" justifyContent="center">
+                <Menu>
+                    <MenuButton
+                      as={Button}
+                      rightIcon={<ChevronDownIcon />}
+                      width="auto"
+                      minWidth="240px"
+                    >
+                      {displaySelectedGCGenres}
+                    </MenuButton>
+                  <MenuList sx={{ maxHeight: '200px', overflowY: 'auto' }}>
+                    {genres.map(genre => (
+                      <MenuItem
+                        key={genre}
+                        onClick={() => handleGenreComplexityClick(genre)}
+                        sx={{ color: 'black', fontSize: '12pt' }}
+                        background={selectedGCGenres.includes(genre) ? 'gray.200' : 'white'}
+                        closeOnSelect={false}
+                      >
+                        {genre}
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </Menu>
+                <Tooltip label="Clear all selected genres" placement="top-start">
+                    <Icon
+                      as={DeleteIcon}
+                      w={5}
+                      h={5}
+                      color={'white'}
+                      _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
+                      sx={{ marginLeft: '10px' }}
+                      onClick={() => setSelectedGCGenres([])}
+                    />
+                </Tooltip>
+                <Tooltip label="Find genre complexity metric for selected genres" placement="top-start">
+                    <Icon
+                      as={CheckCircleIcon}
+                      w={5}
+                      h={5}
+                      color={hasError ? 'IndianRed' : 'white'}
+                      _hover={{ color: 'LightGreen', transform: 'scale(1.2)' }}
+                      sx={{
+                        marginLeft: '10px',
+                        animation: hasError ? `${shake} 0.82s cubic-bezier(.36,.07,.19,.97) both` : 'none',
+                        _hover: {
+                            color: hasError ? 'IndianRed' : 'LightGreen',  // Conditional hover color
+                            transform: 'scale(1.2)'
+                        }
+                      }}
+                      onClick={() => handleMultipleGenresComplexity()}
+                    />
+                </Tooltip>
+              </Flex>
+
+
+
+
+          </Flex>
+
+          <Flex direction="column" alignItems="center" mt="4" style={{ width: '800px', height: '400px'}}>
+            {genreComplexityData && genreComplexityData.length > 0 && (
+              <GCChart GCData={genreComplexityData} />
+            )}
+          </Flex>  
 
 
       </div>
