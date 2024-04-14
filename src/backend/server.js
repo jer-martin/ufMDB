@@ -95,7 +95,7 @@ const getDiversity = async (genre) => {
 }
 
 const getGenreComplexities = async (genre) => {
-  console.log('executing getGenreComplexities with genre:', genre);
+  // console.log('executing getGenreComplexities with genre:', genre);
   let conn;
   try {
     conn = await oracledb.getConnection(config);
@@ -144,7 +144,7 @@ const getGenreComplexities = async (genre) => {
           `;
 
     const result = await conn.execute(sql, [genre], { outFormat: oracledb.OUT_FORMAT_OBJECT });
-    console.log('Result:', result);
+    // console.log('Result:', result);
     return result.rows.map(row => ({
       genre: row.GENRE,
       rdate: row.RDATE,
@@ -179,7 +179,7 @@ app.get('/get-average-role-percentage/:roleName', async (req, res) => {
       )`;
 
     const result = await conn.execute(sql, [roleName], { outFormat: oracledb.OUT_FORMAT_OBJECT });
-    console.log('Result:', result);
+    // console.log('Result:', result);
     if (result.rows.length > 0) {
       // Directly send percentages as top-level array of single values
       const percentages = result.rows.map(row => row.AVERAGE_ROLE_PERCENTAGE || 0); // Ensuring no undefined values
@@ -234,14 +234,14 @@ app.get('/get-movie-popularity/:movieId', async (req, res) => {
         console.log("With parameters:", { movieId });
 
     const result = await conn.execute(sql, [movieId], { outFormat: oracledb.OUT_FORMAT_OBJECT });
-    console.log('Result:', result);
+    // console.log('Result:', result);
     if (result.rows.length > 0) {
       const moviePopularity = result.rows.map(row => ({
         movieId: row.MOVIE_ID,  // Accessing the MOVIE_ID property
         movieName: row.MOVIE_NAME,  // Accessing the MOVIE_NAME property
         popularity: ((row.POPULARITY - 3.38) / (164.7 - 3.38)) * 10  // Normalizing the POPULARITY property to be between 0 and 10
       }));
-      console.log('Movies:', moviePopularity);
+      // console.log('Movies:', moviePopularity);
       res.json(moviePopularity);  // Sending the array of movie objects
   }} catch (err) {
     console.error('Error executing query:', err);
@@ -306,11 +306,11 @@ app.get('/get-diversity/:genre', async (req, res) => {
 app.get('/get-genre-complexity/:genre', async (req, res) => {
   console.log('req.params:', req.params);
   const { genre } = req.params;
-  console.log('genre:', genre);
+  // console.log('genre:', genre);
 
   try {
     const GCData = await getGenreComplexities(genre);
-    console.log('GCData:', GCData);
+    // console.log('GCData:', GCData);
     res.json(GCData); // Send the movie data back to the frontend
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });

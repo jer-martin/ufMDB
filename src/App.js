@@ -2,7 +2,7 @@ import logo from './logo.svg';
 import './App.css';
 import Nav from './components/Nav';
 import { Button, Input, Text, Flex, Menu, MenuButton, MenuItem, MenuList, Icon, Tooltip, Divider, Box} from '@chakra-ui/react'; // Ensure Chakra UI imports are here
-import { ChevronDownIcon, DeleteIcon, CheckCircleIcon, WarningIcon, QuestionIcon} from '@chakra-ui/icons'; // Ensure Chakra UI imports are here
+import { ChevronDownIcon, DeleteIcon, CheckCircleIcon, WarningIcon, QuestionIcon, SpinnerIcon} from '@chakra-ui/icons'; // Ensure Chakra UI imports are here
 import React, { useState, useCallback, useEffect } from 'react';
 import { CgArrowsExpandDownRight } from "react-icons/cg";
 import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Filler, Legend, TimeScale } from 'chart.js';
@@ -30,49 +30,70 @@ const shake = keyframes`
   }
 `;
 
+const rotate = keyframes`
+  from {  transform: rotate(0deg); }
+  to {  transform: rotate(360deg); }
+`;
+
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Filler, Legend, ChartTooltip, TimeScale);
 
 
 const optionsDiversity = {
   responsive: true,
+  animations: false,  // Disable all animations
   scales: {
     x: {
       type: 'time',
       time: {
-        unit: 'year',  // Can be set to 'year', 'month', etc.
-        parser: 'yyyy',  // Format of the year
-        tooltipFormat: 'yyyy',  // Format of the tooltip
+        unit: 'year',
+        parser: 'yyyy',
+        tooltipFormat: 'yyyy',
         displayFormats: {
-          year: 'yyyy'  // Format of the year label
-        }  
+          year: 'yyyy'
+        }
       },
       title: {
         display: true,
-        text: 'Year'
+        text: 'Year',
+        color: '#bfbfbf'  // Light grey color for better visibility on dark backgrounds
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
       }
     },
     y: {
       beginAtZero: true,
       title: {
         display: true,
-        text: 'Average Value'
+        text: 'Average Value',
+        color: '#bfbfbf'  // Light grey color
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
       }
     }
   },
   plugins: {
     legend: {
-      display: true
+      display: true,
+      labels: {
+        color: 'grey'  // Light grey color for the legend text
+      }
     },
     tooltip: {
       enabled: true,
       mode: 'index',
-      intersect: false
+      intersect: false,
+      bodyColor: 'grey',  // Light grey color for the tooltip text
+      titleColor: 'grey'  // Light grey color for the tooltip title
     }
   }
 };
 
+
 const optionsGC = {
   responsive: true,
+  animations: false,
   scales: {
     x: {
       type: 'time',
@@ -112,7 +133,7 @@ const optionsGC = {
 const createDiversityChartData = (genreData) => {
   const datasets = genreData.map((genreArray, index) => {
     // console.log("genreArray[0]:  \n", genreArray[0])
-    const color = `hsl(${index * 360 / genreData.length}, 100%, 50%)`;
+    const color = `hsl(${index * 360 / genreData.length}, 60%, 60%)`;
     return {
       label: genreArray[0].genre,
       data: genreArray.map(d => ({
@@ -132,7 +153,7 @@ const createDiversityChartData = (genreData) => {
 const createGCChartData = (genreData) => {
   const datasets = genreData.map((genreArray, index) => {
     // console.log("genreArray[0]:  \n", genreArray[0])
-    const color = `hsl(${index * 360 / genreData.length}, 100%, 50%)`;
+    const color = `hsl(${index * 360 / genreData.length}, 60%, 60%)`;
     return {
       label: genreArray[0].genre,
       data: genreArray.map(d => ({
@@ -160,6 +181,8 @@ function App() {
   const [selectedDiversityGenres, setSelectedDiversityGenres] = useState([]);
   const [selectedGCGenres, setSelectedGCGenres] = useState([]);
   const [hasError, setHasError] = useState(false);
+  const [isLoadingDiversity, setIsLoadingDiversity] = useState(false);
+  const [isLoadingGC, setIsLoadingGC] = useState(false);
   const [diversityGenreData, setDiversityGenreData] = useState([]);
   const [genreComplexityData, setGenreComplexityData] = useState([]);
   
@@ -310,7 +333,8 @@ const handleGenreComplexityClick = (genre) => {
     const genre = `${encodeURIComponent(genreName)}`;
     const url = `/get-diversity/${genre}`;
     try {
-      console.log('Fetching URL:', url);
+      setIsLoadingDiversity(true);
+      // console.log('Fetching URL:', url);
       const response = await fetch(url);
       const data = await response.json();
       return data;
@@ -323,7 +347,8 @@ const handleGenreComplexityClick = (genre) => {
     const genre = `${encodeURIComponent(genreName)}`;
     const url = `/get-genre-complexity/${genre}`; /// need to change this to get-genre-complexity or smthing
     try {
-      console.log('Fetching URL:', url);
+      setIsLoadingGC(true);
+      // console.log('Fetching URL:', url);
       const response = await fetch(url);
       const data = await response.json();
       return data;
@@ -340,6 +365,7 @@ const handleGenreComplexityClick = (genre) => {
       const results = await Promise.all(genrePromises);
       console.log('Results:', results);
       setDiversityGenreData(results);
+      setIsLoadingDiversity(false);
       const chartData = createDiversityChartData(results);
     } catch (error) {
       console.error('Error fetching data for multiple genres:', error);
@@ -355,6 +381,7 @@ const handleGenreComplexityClick = (genre) => {
       console.log('Results:', results);
       setGenreComplexityData(results);
       const chartData = createGCChartData(results);
+      setIsLoadingGC(false);
     } catch (error) {
       console.error('Error fetching data for multiple genres:', error);
     }
@@ -485,9 +512,23 @@ const handleGenreComplexityClick = (genre) => {
             <Flex direction="row" alignItems="center" justifyContent="center">
                 <Box w={'auto'} h={'auto'}>
                   <Text fontSize="md" color={'white'}>Does diversity have a bearing on popularity?</Text>
-                  <Text fontSize="xs" color={'grey'}>Choose any number of genres, let's find out!</Text>
+                  <Text fontSize="xs" color={'grey'}>Choose any number of genres to compare their diversity!</Text>
                 </Box>
-                <Tooltip label="Diversity (in this case) refers to the variety of languages used in films, which, when compared to their average ratings, can indicate a correlation between a film's linguistic diversity and its perceived quality or appeal." placement="top-start">
+                <Tooltip 
+                  label={
+                    <>
+                      <Box as="p" mb="2">
+                        <Box as="span" fontWeight="bold" color="lightpink">Diversity: </Box> 
+                        Refers to the variety of languages used in films. This metric helps reveal any correlation between a film's linguistic diversity and its perceived quality or appeal.
+                      </Box>
+                      <Box as="p">
+                        <Box as="span" fontWeight="bold" color="lightpink">Popularity: </Box> 
+                        Calculated by adding the total number of releases for each movie to twice its average rating. This ensures a balanced measure that reflects both the movie's distribution and viewer appreciation.
+                      </Box>
+                    </>
+                  } 
+                  placement="top-start"
+                >
                   <Icon
                     as={QuestionIcon}
                     w={5}
@@ -526,7 +567,7 @@ const handleGenreComplexityClick = (genre) => {
                   ))}
                 </MenuList>
               </Menu>
-              <Tooltip label="Clear all selected genres" placement="top-start">
+              <Tooltip label="Clear all selected genres and remove currently loaded chart" placement="top-start">
                   <Icon
                     as={DeleteIcon}
                     w={5}
@@ -534,26 +575,26 @@ const handleGenreComplexityClick = (genre) => {
                     color={'white'}
                     _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
                     sx={{ marginLeft: '10px' }}
-                    onClick={() => setSelectedDiversityGenres([])}
+                    onClick={() => {setSelectedDiversityGenres([]); setDiversityGenreData([]);}}
                   />
               </Tooltip>
-              <Tooltip label="Find diversity-popularity metric for selected genres" placement="top-start">
-                  <Icon
-                    as={CheckCircleIcon}
-                    w={5}
-                    h={5}
-                    color={hasError ? 'IndianRed' : 'white'}
-                    _hover={{ color: 'LightGreen', transform: 'scale(1.2)' }}
-                    sx={{
-                      marginLeft: '10px',
-                      animation: hasError ? `${shake} 0.82s cubic-bezier(.36,.07,.19,.97) both` : 'none',
-                      _hover: {
-                          color: hasError ? 'IndianRed' : 'LightGreen',  // Conditional hover color
-                          transform: 'scale(1.2)'
-                      }
-                    }}
-                    onClick={() => handleMultipleGenresDiversity()}
-                  />
+              <Tooltip label="Find diversity-popularity metric for selected genres" placement="top-start" >
+                <Icon
+                  as={isLoadingDiversity ? SpinnerIcon : CheckCircleIcon}
+                  w={5}
+                  h={5}
+                  color={hasError ? 'IndianRed' : 'white'}
+                  _hover={{ color: 'LightGreen', transform: 'scale(1.2)' }}
+                  sx={{
+                    marginLeft: '10px',
+                    animation: hasError ? `${shake} 0.82s cubic-bezier(.36,.07,.19,.97) both` : (isLoadingDiversity ? `${rotate} 1s linear infinite` : 'none'),
+                    _hover: {
+                        color: hasError ? 'IndianRed' : (isLoadingDiversity ? 'white' : 'LightGreen'),  // Conditional hover color
+                        transform: 'scale(1.2)'
+                    }
+                  }}
+                  onClick={() => handleMultipleGenresDiversity()}
+                />
               </Tooltip>
             </Flex>
 
@@ -574,10 +615,19 @@ const handleGenreComplexityClick = (genre) => {
 
               <Flex direction="row" alignItems="center" justifyContent="center">
                   <Box w={'auto'} h={'auto'}>
-                    <Text fontSize="md" color={'white'}>Genre Complexity</Text>
-                    <Text fontSize="xs" color={'grey'}>Choose any number of genres to compare their complexity over time</Text>
+                    <Text fontSize="md" color={'white'}>How complex is each genre in comparison to each other?</Text>
+                    <Text fontSize="xs" color={'grey'}>Choose any number of genres to compare their complexity over time!</Text>
                   </Box>
-                  <Tooltip label="Complexity (in this case) refers to the number of themes movies in that genre explored along with how well the movies explored the themes." placement="top-start">
+                  <Tooltip 
+                  label={
+                    <>
+                      <Box as="p" mb="2">
+                        <Box as="span" fontWeight="bold" color="lightpink">Complexity: </Box> 
+                         (in this case) refers to the number of themes movies in that genre explored along with how well the movies explored the themes.
+                      </Box>
+                    </>
+                  } 
+                  placement="top-start">
                     <Icon
                       as={QuestionIcon}
                       w={5}
@@ -616,7 +666,7 @@ const handleGenreComplexityClick = (genre) => {
                     ))}
                   </MenuList>
                 </Menu>
-                <Tooltip label="Clear all selected genres" placement="top-start">
+                <Tooltip label="Clear all selected genres and remove currently loaded chart" placement="top-start">
                     <Icon
                       as={DeleteIcon}
                       w={5}
@@ -624,21 +674,21 @@ const handleGenreComplexityClick = (genre) => {
                       color={'white'}
                       _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
                       sx={{ marginLeft: '10px' }}
-                      onClick={() => setSelectedGCGenres([])}
+                      onClick={() => {setSelectedGCGenres([]); setGenreComplexityData([]);}}
                     />
                 </Tooltip>
-                <Tooltip label="Find genre complexity metric for selected genres" placement="top-start">
+                <Tooltip label="Find genre complexity metric for selected genres" placement="top-start" >
                     <Icon
-                      as={CheckCircleIcon}
+                      as={isLoadingGC ? SpinnerIcon : CheckCircleIcon}
                       w={5}
                       h={5}
                       color={hasError ? 'IndianRed' : 'white'}
                       _hover={{ color: 'LightGreen', transform: 'scale(1.2)' }}
                       sx={{
                         marginLeft: '10px',
-                        animation: hasError ? `${shake} 0.82s cubic-bezier(.36,.07,.19,.97) both` : 'none',
+                        animation: hasError ? `${shake} 0.82s cubic-bezier(.36,.07,.19,.97) both` : (isLoadingGC ? `${rotate} 1s linear infinite` : 'none'),
                         _hover: {
-                            color: hasError ? 'IndianRed' : 'LightGreen',  // Conditional hover color
+                            color: hasError ? 'IndianRed' : (isLoadingGC ? 'white' : 'LightGreen'),  // Conditional hover color
                             transform: 'scale(1.2)'
                         }
                       }}
