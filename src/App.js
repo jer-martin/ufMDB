@@ -10,6 +10,8 @@ import { Line } from 'react-chartjs-2';
 import { Tooltip as ChartTooltip } from 'chart.js';
 import { keyframes } from '@emotion/react';
 import { adapterDateFns } from 'chartjs-adapter-date-fns';
+import { countries } from './countries.js';
+import { FixedSizeList as List } from 'react-window';
 
 // Define a shake animation
 const shake = keyframes`
@@ -130,6 +132,58 @@ const optionsGC = {
   }
 };
 
+const optionsMS = {
+  responsive: true,
+  animations: false,  // Disable all animations
+  scales: {
+    x: {
+      type: 'time',
+      time: {
+        unit: 'year',
+        parser: 'yyyy',
+        tooltipFormat: 'yyyy',
+        displayFormats: {
+          year: 'yyyy'
+        }
+      },
+      title: {
+        display: true,
+        text: 'Year',
+        color: '#bfbfbf'  // Light grey color for better visibility on dark backgrounds
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
+      }
+    },
+    y: {
+      beginAtZero: true,
+      title: {
+        display: true,
+        text: 'Average Value',
+        color: '#bfbfbf'  // Light grey color
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
+      }
+    }
+  },
+  plugins: {
+    legend: {
+      display: true,
+      labels: {
+        color: 'grey'  // Light grey color for the legend text
+      }
+    },
+    tooltip: {
+      enabled: true,
+      mode: 'index',
+      intersect: false,
+      bodyColor: 'grey',  // Light grey color for the tooltip text
+      titleColor: 'grey'  // Light grey color for the tooltip title
+    }
+  }
+};
+
 const createDiversityChartData = (genreData) => {
   const datasets = genreData.map((genreArray, index) => {
     // console.log("genreArray[0]:  \n", genreArray[0])
@@ -142,6 +196,7 @@ const createDiversityChartData = (genreData) => {
       })),
       borderColor: color,
       backgroundColor: color,
+      tension: 0.4
     };
   });
 
@@ -162,6 +217,7 @@ const createGCChartData = (genreData) => {
       })),
       borderColor: color,
       backgroundColor: color,
+      tension: 0.4
     };
   });
 
@@ -169,6 +225,51 @@ const createGCChartData = (genreData) => {
     datasets,
   };
 };
+
+const createMSChartData = (MSData, selectedMSGenres) => {
+  const latestFirstPointYear = Math.max(
+    ...MSData.map(genreData => genreData.length ? genreData[0].yearOfRelease : 0)
+  );
+
+  // Assuming MSData is an array of arrays, where each sub-array contains data for a specific genre
+  const datasets = MSData.map((dataForOneGenre, index) => {
+    // Filter data to include only years after the latest first point and up to 2023
+    const filteredData = dataForOneGenre.filter(item => 
+      item.yearOfRelease > latestFirstPointYear && item.yearOfRelease <= 2023
+    );
+
+    // Use the index to get the genre name from selectedMSGenres
+    const genreName = selectedMSGenres[index];
+    const color = `hsl(${index * 360 / MSData.length}, 70%, 60%)`;
+    const backgroundColor = `hsla(${index * 360 / MSData.length}, 70%, 60%, 0.2)`;
+
+    return {
+      label: genreName,
+      data: filteredData.map(item => ({
+        x: item.yearOfRelease.toString(),
+        y: item.genreMarketShare
+      })),
+      borderColor: color,
+      backgroundColor: backgroundColor,
+      fill: true,
+      tension: 0.4
+    };
+  });
+
+  // Sorting and deduplication of years across all filtered datasets
+  const allYears = datasets.reduce((acc, dataset) => {
+    const years = dataset.data.map(item => item.x);
+    return acc.concat(years);
+  }, []);
+
+  const uniqueYears = Array.from(new Set(allYears)).sort((a, b) => a - b);
+
+  return {
+    labels: uniqueYears,
+    datasets
+  };
+};
+
 
 function App() {
   const [formData, setFormData] = useState({
@@ -180,11 +281,15 @@ function App() {
   const [genrePercentages, setGenrePercentages] = useState([]);
   const [selectedDiversityGenres, setSelectedDiversityGenres] = useState([]);
   const [selectedGCGenres, setSelectedGCGenres] = useState([]);
+  const [selectedMSGenres, setSelectedMSGenres] = useState([]);
+  const [selectedCountry, setSelectedCountry] = useState('');
   const [hasError, setHasError] = useState(false);
   const [isLoadingDiversity, setIsLoadingDiversity] = useState(false);
   const [isLoadingGC, setIsLoadingGC] = useState(false);
+  const [isLoadingMS, setIsLoadingMS] = useState(false);
   const [diversityGenreData, setDiversityGenreData] = useState([]);
   const [genreComplexityData, setGenreComplexityData] = useState([]);
+  const [MSData, setGenreMSData] = useState([]);
   
   
   
@@ -195,6 +300,19 @@ function App() {
       [name]: value,
     });
   };
+
+  const CountryRow = ({ index, style }) => (
+    <MenuItem
+      key={countries[index]}
+      onClick={() => handleCountryClick(countries[index])}
+      sx={{ color: 'black', fontSize: '12pt', background: selectedCountry === countries[index] ? 'gray.200' : 'white' }}
+      style={style}  // Important to pass style for proper positioning
+      // on hover, make gray.200. if selected and hovered, make grey.300
+      _hover={{ background: selectedCountry === countries[index] ? 'gray.300' : 'gray.100' }}
+    >
+      {countries[index]}
+    </MenuItem>
+  );
 
 
   const roles=["Additional directing","Additional photography","Art direction","Assistant director","Camera operator","Casting","Choreography","Cinematography",
@@ -212,8 +330,9 @@ function App() {
 
   const displaySelectedGCGenres = selectedGCGenres.length > 0 ? selectedGCGenres.join(', ') : 'Select Genres';
 
+  const displaySelectedCountry = selectedCountry || 'Select a Country';
 
-
+  const displaySelectedMSGenres = selectedMSGenres.length > 0 ? selectedMSGenres.join(', ') : 'Select Genres';
 
   const handleRoleClick = (role) => {
     setSelectedRoles(prev => {
@@ -247,6 +366,18 @@ const handleDiversityGenreClick = (genre) => {
 
 const handleGenreComplexityClick = (genre) => {
   setSelectedGCGenres(prevGenres => {
+    if (prevGenres.includes(genre)) {
+      // If the genre is already selected, remove it from the array
+      return prevGenres.filter(g => g !== genre);
+    } else {
+      // If the genre is not selected, add it to the array
+      return [...prevGenres, genre];
+    }
+  });
+};
+
+const handleGenreMarketShareClick = (genre) => {
+  setSelectedMSGenres(prevGenres => {
     if (prevGenres.includes(genre)) {
       // If the genre is already selected, remove it from the array
       return prevGenres.filter(g => g !== genre);
@@ -357,6 +488,10 @@ const handleGenreComplexityClick = (genre) => {
     }
   };
 
+  const handleCountryClick = (country) => {
+    setSelectedCountry(country);
+  };
+
   const handleMultipleGenresDiversity = async () => {
     // start fetching percentages for all selected genres
     const genrePromises = selectedDiversityGenres.map(genre => handleDiversityClick(genre));
@@ -386,6 +521,32 @@ const handleGenreComplexityClick = (genre) => {
       console.error('Error fetching data for multiple genres:', error);
     }
   };
+
+  const handleMarketShare = async (genreName) => {
+    const genre = `${encodeURIComponent(genreName)}`;
+    const url = `/get-market-share/${genre}/${selectedCountry}`;
+    try {
+      setIsLoadingMS(true);
+      // console.log('Fetching URL:', url);
+      const response = await fetch(url);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching market share:', error);
+    }
+  }
+
+  const handleMultipleGenresMarketShare = async () => {
+    const genrePromises = selectedMSGenres.map(genre => handleMarketShare(genre));
+    try {
+      const results = await Promise.all(genrePromises);
+      console.log('Results:', results);
+      setGenreMSData(results);
+      setIsLoadingMS(false);
+    } catch (error) {
+      console.error('Error fetching data for multiple genres:', error);
+    }
+  };
   
 
 
@@ -401,7 +562,11 @@ const handleGenreComplexityClick = (genre) => {
   
     return <Line data={chartData} options={optionsGC} />;
   };
-  
+
+  const MSChart = ({ MSData, selectedGenres }) => {
+    const chartData = createMSChartData(MSData, selectedGenres);
+    return <Line data={chartData} options={optionsMS} />;
+  };
   
 
 
@@ -428,6 +593,7 @@ const handleGenreComplexityClick = (genre) => {
                   sx={{ color: 'black', fontSize: '12pt' }}
                   background={selectedRoles.includes(role) ? 'gray.200' : 'white'}
                   closeOnSelect={false}
+                  _hover={{ background: selectedRoles.includes(role) ? 'gray.300' : 'gray.100' }}
                 >
                   {role}
                 </MenuItem>
@@ -561,6 +727,7 @@ const handleGenreComplexityClick = (genre) => {
                       sx={{ color: 'black', fontSize: '12pt' }}
                       background={selectedDiversityGenres.includes(genre) ? 'gray.200' : 'white'}
                       closeOnSelect={false}
+                      _hover={{ background: selectedDiversityGenres.includes(genre) ? 'gray.300' : 'gray.100' }}
                     >
                       {genre}
                     </MenuItem>
@@ -660,6 +827,7 @@ const handleGenreComplexityClick = (genre) => {
                         sx={{ color: 'black', fontSize: '12pt' }}
                         background={selectedGCGenres.includes(genre) ? 'gray.200' : 'white'}
                         closeOnSelect={false}
+                        _hover={{ background: selectedGCGenres.includes(genre) ? 'gray.300' : 'gray.100' }}
                       >
                         {genre}
                       </MenuItem>
@@ -706,7 +874,122 @@ const handleGenreComplexityClick = (genre) => {
             {genreComplexityData && genreComplexityData.length > 0 && (
               <GCChart GCData={genreComplexityData} />
             )}
-          </Flex>  
+          </Flex> 
+
+          <Divider orientation="horizontal" mt="4" width={'30%'} />
+          <Flex direction="column" alignItems="center" mt="4">
+
+              <Flex direction="row" alignItems="center" justifyContent="center">
+                  <Box w={'auto'} h={'auto'}>
+                    <Text fontSize="md" color={'white'}>What market share does each genre have in each country?</Text>
+                    <Text fontSize="xs" color={'grey'}>Choose any number of genres and a country to compare their market share over time!</Text>
+                  </Box>
+                  <Tooltip 
+                  label={
+                    <>
+                      <Box as="p" mb="2">
+                        <Box as="span" fontWeight="bold" color="lightpink">Market Share: </Box> 
+                        Reflects the proportion of the total film releases in a country that belong to a specific genre within a given year.
+                      </Box>
+                    </>
+                  } 
+                  placement="top-start">
+                    <Icon
+                      as={QuestionIcon}
+                      w={5}
+                      h={5}
+                      color={'white'}
+                      _hover={{transform: 'scale(1.2)', color: 'LightBlue'}}
+                      sx={{ marginLeft: '10px' }}
+                      onClick={() => setSelectedGCGenres([])}
+                    />
+                  </Tooltip>
+              </Flex>
+              
+              <Box w={4} h={3} /> {/* Spacer */}
+
+              <Flex direction="row" alignItems="center" justifyContent="center">
+                <Menu>
+                    <MenuButton
+                      as={Button}
+                      rightIcon={<ChevronDownIcon />}
+                      width="auto"
+                      minWidth="240px"
+                    >
+                      {displaySelectedMSGenres}
+                    </MenuButton>
+                  <MenuList sx={{ maxHeight: '200px', overflowY: 'auto' }}>
+                    {genres.map(genre => (
+                      <MenuItem
+                        key={genre}
+                        onClick={() => handleGenreMarketShareClick(genre)}
+                        sx={{ color: 'black', fontSize: '12pt' }}
+                        background={selectedMSGenres.includes(genre) ? 'gray.200' : 'white'}
+                        closeOnSelect={false}
+                        _hover={{ background: selectedMSGenres.includes(genre) ? 'gray.300' : 'gray.100' }}
+                      >
+                        {genre}
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </Menu>
+                <Box w={4} h={3} /> {/* Spacer */}
+                <Menu>
+                  <MenuButton as={Button} rightIcon={<ChevronDownIcon />} width="auto" minWidth="240px">
+                    {selectedCountry || 'Select a Country'}
+                  </MenuButton>
+                  <MenuList sx={{ maxHeight: '250px', overflowY: 'hidden' }}>
+                    <List
+                      height={250}  // Adjust height accordingly
+                      width={'auto'}   // Adjust width accordingly
+                      itemCount={countries.length}
+                      itemSize={50}  // Adjust size per item
+                    >
+                      {CountryRow}
+                    </List>
+                  </MenuList>
+                </Menu>
+                <Tooltip label="Clear selected genres and country and remove currently loaded chart" placement="top-start">
+                    <Icon
+                      as={DeleteIcon}
+                      w={5}
+                      h={5}
+                      color={'white'}
+                      _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
+                      sx={{ marginLeft: '10px' }}
+                      onClick={() => {setSelectedGCGenres([]); setGenreComplexityData([]); setSelectedCountry('');}}
+                    />
+                </Tooltip>
+                <Tooltip label="Find market share for selected genres" placement="top-start" >
+                    <Icon
+                      as={isLoadingMS ? SpinnerIcon : CheckCircleIcon}
+                      w={5}
+                      h={5}
+                      color={hasError ? 'IndianRed' : 'white'}
+                      _hover={{ color: 'LightGreen', transform: 'scale(1.2)' }}
+                      sx={{
+                        marginLeft: '10px',
+                        animation: hasError ? `${shake} 0.82s cubic-bezier(.36,.07,.19,.97) both` : (isLoadingMS ? `${rotate} 1s linear infinite` : 'none'),
+                        _hover: {
+                            color: hasError ? 'IndianRed' : (isLoadingMS ? 'white' : 'LightGreen'),  // Conditional hover color
+                            transform: 'scale(1.2)'
+                        }
+                      }}
+                      onClick={() => handleMultipleGenresMarketShare()}
+                    />
+                </Tooltip>
+              </Flex>
+
+
+
+
+          </Flex>
+
+          <Flex direction="column" alignItems="center" mt="4" style={{ width: '800px', height: '400px'}}>
+            {MSData && MSData.length > 0 && (
+              <MSChart MSData={MSData} selectedGenres={selectedMSGenres} />
+            )}
+          </Flex>
 
 
       </div>

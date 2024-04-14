@@ -162,6 +162,78 @@ const getGenreComplexities = async (genre) => {
   }
 }
 
+const getGenreMarketShareByCountry = async (genre, country) => {
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
+
+    const sql = `
+      WITH
+      ranked_genres_per_country AS (
+        SELECT
+          Country,
+          Genre,
+          yor,
+          COUNT(*) AS num_movies_in_genre_for_year
+        FROM (
+          SELECT DISTINCT
+            g.ID,
+            r.Country,
+            g.genre,
+            EXTRACT(YEAR FROM r.rdate) AS yor
+          FROM jeremymartin.genres g
+          JOIN jeremymartin.releases r ON r.id = g.id
+          WHERE g.genre = :genre AND r.Country = :country
+        )
+        GROUP BY Country, Genre, yor
+      ),
+      totalMoviesPerCountry AS (
+        SELECT
+          Country,
+          yor,
+          COUNT(*) AS TotalMoviesForYear
+        FROM (
+          SELECT DISTINCT
+            r.Country,
+            r.ID,
+            EXTRACT(YEAR FROM r.rdate) AS yor
+          FROM jeremymartin.releases r
+          WHERE r.Country = :country
+        )
+        GROUP BY Country, yor
+      )
+      SELECT
+        rg.Country,
+        rg.Genre,
+        rg.yor AS "Year of Release",
+        rg.num_movies_in_genre_for_year AS "Number of Movies in Genre",
+        tmc.TotalMoviesForYear AS "Total Movies in Country",
+        ROUND(100 * rg.num_movies_in_genre_for_year / tmc.TotalMoviesForYear, 2) AS "Genre Percentage"
+      FROM ranked_genres_per_country rg
+      JOIN totalMoviesPerCountry tmc ON rg.Country = tmc.Country AND rg.yor = tmc.yor
+      WHERE rg.Genre = :genre AND rg.Country = :country
+      ORDER BY rg.Country, rg.Genre, rg.yor
+    `;
+
+    const result = await conn.execute(sql, { genre, country }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    return result.rows.map(row => ({
+      country: row.Country,
+      genre: row.Genre,
+      yearOfRelease: row['Year of Release'],
+      moviesInGenre: row['Number of Movies in Genre'],
+      totalMovies: row['Total Movies in Country'],
+      genreMarketShare: row['Genre Percentage']
+    }));
+  } catch (err) {
+    console.error('Error executing query:', err);
+    throw err;
+  } finally {
+    if (conn) {
+      await conn.close();
+    }
+  }
+}
+
 app.get('/get-average-role-percentage/:roleName', async (req, res) => {
   const { roleName } = req.params;
 
@@ -312,6 +384,20 @@ app.get('/get-genre-complexity/:genre', async (req, res) => {
     const GCData = await getGenreComplexities(genre);
     // console.log('GCData:', GCData);
     res.json(GCData); // Send the movie data back to the frontend
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/get-market-share/:genre/:country', async (req, res) => {
+  console.log('req.params:', req.params);
+  const { genre, country } = req.params;
+  // console.log('genre:', genre);
+
+  try {
+    const GMData = await getGenreMarketShareByCountry(genre, country);
+    // console.log('GMData:', GMData);
+    res.json(GMData); // Send the movie data back to the frontend
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
