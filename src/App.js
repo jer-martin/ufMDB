@@ -186,7 +186,6 @@ const optionsGCMonthly = {
       type: 'time',
       time: {
         unit: 'month',  // Can be set to 'year', 'month', etc.
-        // parser: 'mm/dd/yyyy',  // Format of the year
         tooltipFormat: 'MMM, yyyy',  // Format of the tooltip
         displayFormats: {
           day: 'MMM, yyyy'  // Format of the year label
@@ -450,6 +449,7 @@ function App() {
   const [selectedDiversityGenres, setSelectedDiversityGenres] = useState([]);
   const [selectedGCGenres, setSelectedGCGenres] = useState([]);
   const [selectedGCGrouping, setSelectedGCGrouping] = useState([]);
+  const [GCGrouping, setGCGrouping] = useState([]);
   const [selectedMSGenres, setSelectedMSGenres] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState('');
   const [hasError, setHasError] = useState(false);
@@ -691,6 +691,7 @@ const handleGenreMarketShareClick = (genre) => {
   };
 
   const handleMultipleGenresComplexity = async () => {
+    setGCGrouping(selectedGCGrouping);
     // start fetching percentages for all selected genres
     const genrePromises = selectedGCGenres.map(genre => handleGCClick(genre));
     // the response will be an array with year, avgNumLanguages, avgRating, and genre
@@ -743,9 +744,9 @@ const handleGenreMarketShareClick = (genre) => {
   const GCChart = ({ GCData }) => {
     const chartData = createGCChartData(GCData);
     let op;
-    if (selectedGCGrouping == "Yearly") {
+    if (GCGrouping == "Yearly") {
       op = optionsGCYearly;
-    } else if (selectedGCGrouping == "Monthly") {
+    } else if (GCGrouping == "Monthly") {
       op = optionsGCMonthly;
     } else {
       op = optionsGCDaily;

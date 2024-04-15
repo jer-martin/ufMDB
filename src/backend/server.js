@@ -286,7 +286,7 @@ const getGenreComplexitiesYrly = async (genre, years) => {
     const result = await conn.execute(sql, { genre, years }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
     return result.rows.map(row => ({
       genre: row.GENRE,
-      rdate: row.RYEAR,
+      rdate: row.RYEAR.toString(),
       movie_complexity: row.AMC,
       genre_complexity: row.AGC
     }));
