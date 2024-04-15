@@ -1,7 +1,7 @@
 import logo from './logo.svg';
 import './App.css';
 import Nav from './components/Nav';
-import { Button, Input, Text, Flex, Menu, MenuButton, MenuItem, MenuList, Icon, Tooltip, Divider, Box} from '@chakra-ui/react'; // Ensure Chakra UI imports are here
+import { Button, Input, Text, Flex, Menu, MenuButton, MenuItem, MenuList, Icon, Tooltip, Divider, Box, InputGroup} from '@chakra-ui/react'; // Ensure Chakra UI imports are here
 import { ChevronDownIcon, DeleteIcon, CheckCircleIcon, WarningIcon, QuestionIcon, SpinnerIcon} from '@chakra-ui/icons'; // Ensure Chakra UI imports are here
 import React, { useState, useCallback, useEffect } from 'react';
 import { CgArrowsExpandDownRight } from "react-icons/cg";
@@ -12,6 +12,9 @@ import { keyframes } from '@emotion/react';
 import { adapterDateFns } from 'chartjs-adapter-date-fns';
 import { countries } from './countries.js';
 import { FixedSizeList as List } from 'react-window';
+import zoomPlugin from 'chartjs-plugin-zoom';
+
+Chart.register(zoomPlugin);
 
 // Define a shake animation
 const shake = keyframes`
@@ -88,12 +91,148 @@ const optionsDiversity = {
       intersect: false,
       bodyColor: 'grey',  // Light grey color for the tooltip text
       titleColor: 'grey'  // Light grey color for the tooltip title
+    },
+    zoom: {
+      pan: {
+        enabled: true,
+        mode: 'xy'
+      },
+      zoom: {
+        wheel: {
+          enabled: true
+        },
+        pinch: {
+          enabled: true
+        },
+        mode: 'xy'
+      }
+    }
+  }
+};
+
+const optionsGCYearly = {
+  responsive: true,
+  animations: false,  // Disable all animations
+  scales: {
+    x: {
+      type: 'time',
+      time: {
+        unit: 'year',
+        parser: 'yyyy',
+        tooltipFormat: 'yyyy',
+        displayFormats: {
+          year: 'yyyy'
+        }
+      },
+      title: {
+        display: true,
+        text: 'Year',
+        color: '#bfbfbf'  // Light grey color for better visibility on dark backgrounds
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
+      }
+    },
+    y: {
+      beginAtZero: true,
+      title: {
+        display: true,
+        text: 'Average Value',
+        color: '#bfbfbf'  // Light grey color
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
+      }
+    }
+  },
+  plugins: {
+    legend: {
+      display: true,
+      labels: {
+        color: 'grey'  // Light grey color for the legend text
+      }
+    },
+    tooltip: {
+      enabled: true,
+      mode: 'index',
+      intersect: false,
+      bodyColor: 'grey',  // Light grey color for the tooltip text
+      titleColor: 'grey'  // Light grey color for the tooltip title
+    },
+    zoom: {
+      pan: {
+        enabled: true,
+        mode: 'xy'
+      },
+      zoom: {
+        wheel: {
+          enabled: true
+        },
+        pinch: {
+          enabled: true
+        },
+        mode: 'xy'
+      }
     }
   }
 };
 
 
-const optionsGC = {
+const optionsGCMonthly = {
+  responsive: true,
+  animations: false,
+  scales: {
+    x: {
+      type: 'time',
+      time: {
+        unit: 'month',  // Can be set to 'year', 'month', etc.
+        // parser: 'mm/dd/yyyy',  // Format of the year
+        tooltipFormat: 'MMM, yyyy',  // Format of the tooltip
+        displayFormats: {
+          day: 'MMM, yyyy'  // Format of the year label
+        }  
+      },
+      title: {
+        display: true,
+        text: 'Time'
+      }
+    },
+    y: {
+      beginAtZero: true,
+      title: {
+        display: true,
+        text: 'Genre Complexity'
+      }
+    }
+  },
+  plugins: {
+    legend: {
+      display: true
+    },
+    tooltip: {
+      enabled: true,
+      mode: 'index',
+      intersect: false
+    },
+    zoom: {
+      pan: {
+        enabled: true,
+        mode: 'xy'
+      },
+      zoom: {
+        wheel: {
+          enabled: true
+        },
+        pinch: {
+          enabled: true
+        },
+        mode: 'xy'
+      }
+    }
+  }
+};
+
+const optionsGCDaily = {
   responsive: true,
   animations: false,
   scales: {
@@ -128,6 +267,21 @@ const optionsGC = {
       enabled: true,
       mode: 'index',
       intersect: false
+    },
+    zoom: {
+      pan: {
+        enabled: true,
+        mode: 'xy'
+      },
+      zoom: {
+        wheel: {
+          enabled: true
+        },
+        pinch: {
+          enabled: true
+        },
+        mode: 'xy'
+      }
     }
   }
 };
@@ -180,6 +334,21 @@ const optionsMS = {
       intersect: false,
       bodyColor: 'grey',  // Light grey color for the tooltip text
       titleColor: 'grey'  // Light grey color for the tooltip title
+    },
+    zoom: {
+      pan: {
+        enabled: true,
+        mode: 'xy'
+      },
+      zoom: {
+        wheel: {
+          enabled: true
+        },
+        pinch: {
+          enabled: true
+        },
+        mode: 'xy'
+      }
     }
   }
 };
@@ -207,7 +376,6 @@ const createDiversityChartData = (genreData) => {
 
 const createGCChartData = (genreData) => {
   const datasets = genreData.map((genreArray, index) => {
-    // console.log("genreArray[0]:  \n", genreArray[0])
     const color = `hsl(${index * 360 / genreData.length}, 60%, 60%)`;
     return {
       label: genreArray[0].genre,
@@ -281,6 +449,7 @@ function App() {
   const [genrePercentages, setGenrePercentages] = useState([]);
   const [selectedDiversityGenres, setSelectedDiversityGenres] = useState([]);
   const [selectedGCGenres, setSelectedGCGenres] = useState([]);
+  const [selectedGCGrouping, setSelectedGCGrouping] = useState([]);
   const [selectedMSGenres, setSelectedMSGenres] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState('');
   const [hasError, setHasError] = useState(false);
@@ -324,12 +493,15 @@ function App() {
     "Thriller","Music","History","War","Fantasy","Crime","Drama","Family"
   ];
 
+  const groupings = ["Daily", "Monthly", "Yearly"];
+
   const displaySelectedRoles = selectedRoles.length > 0 ? selectedRoles.join(', ') : 'Select Roles';
 
   const displaySelectedGenres = selectedDiversityGenres.length > 0 ? selectedDiversityGenres.join(', ') : 'Select Genres';
 
   const displaySelectedGCGenres = selectedGCGenres.length > 0 ? selectedGCGenres.join(', ') : 'Select Genres';
 
+  const displaySelectedGCGroupings = selectedGCGrouping.length > 0 ? selectedGCGrouping : 'Select Grouping';
   const displaySelectedCountry = selectedCountry || 'Select a Country';
 
   const displaySelectedMSGenres = selectedMSGenres.length > 0 ? selectedMSGenres.join(', ') : 'Select Genres';
@@ -374,6 +546,9 @@ const handleGenreComplexityClick = (genre) => {
       return [...prevGenres, genre];
     }
   });
+};
+const handleGenreComplexityGroupingClick = (grouping) => {
+  selectedGCGrouping.includes(grouping) ? setSelectedGCGrouping([]) : setSelectedGCGrouping([grouping]);
 };
 
 const handleGenreMarketShareClick = (genre) => {
@@ -476,7 +651,15 @@ const handleGenreMarketShareClick = (genre) => {
 
   const handleGCClick = async (genreName) => {
     const genre = `${encodeURIComponent(genreName)}`;
-    const url = `/get-genre-complexity/${genre}`; /// need to change this to get-genre-complexity or smthing
+    // const url = `/get-genre-complexity/${genre}`; 
+    let url;
+    if (selectedGCGrouping == "Yearly") {
+      url = `/get-genre-complexity-yearly/${genre}/1`;
+    } else if (selectedGCGrouping == "Monthly") {
+      url = `/get-genre-complexity-monthly/${genre}`;
+    } else {
+      url = `/get-genre-complexity/${genre}`;
+    }
     try {
       setIsLoadingGC(true);
       // console.log('Fetching URL:', url);
@@ -559,8 +742,16 @@ const handleGenreMarketShareClick = (genre) => {
 
   const GCChart = ({ GCData }) => {
     const chartData = createGCChartData(GCData);
+    let op;
+    if (selectedGCGrouping == "Yearly") {
+      op = optionsGCYearly;
+    } else if (selectedGCGrouping == "Monthly") {
+      op = optionsGCMonthly;
+    } else {
+      op = optionsGCDaily;
+    }
   
-    return <Line data={chartData} options={optionsGC} />;
+    return <Line data={chartData} options={op} />;
   };
 
   const MSChart = ({ MSData, selectedGenres }) => {
@@ -834,6 +1025,45 @@ const handleGenreMarketShareClick = (genre) => {
                     ))}
                   </MenuList>
                 </Menu>
+                <Box w={3} h={3} /> {/* Spacer */}
+                <Menu>
+                    <MenuButton
+                      as={Button}
+                      rightIcon={<ChevronDownIcon />}
+                      width="auto"
+                      minWidth="240px"
+                      // {selectedGCGrouping=="Yearly" ? "120px" : "240px"}
+                    >
+                      {displaySelectedGCGroupings} 
+                    </MenuButton>
+                  <MenuList sx={{ maxHeight: '200px', overflowY: 'auto' }}>
+                    {groupings.map(grouping => (
+                      <MenuItem
+                        key={grouping}
+                        onClick={() => handleGenreComplexityGroupingClick(grouping)}
+                        sx={{ color: 'black', fontSize: '12pt' }}
+                        background={selectedGCGrouping.includes(grouping) ? 'gray.200' : 'white'}
+                        closeOnSelect={true}
+                      >
+                        {grouping}
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </Menu>
+                {/* {selectedGCGrouping=="Yearly" ? 
+                <Box>
+                  <InputGroup>
+                    <Input
+                      name="movieID"
+                      placeholder="years to group by"
+                      value={formData.movieID}
+                      onChange={handleChange}
+                      width="110"
+                      />  
+                  </InputGroup>  
+                  </Box>
+                  : null
+                }                 */}
                 <Tooltip label="Clear all selected genres and remove currently loaded chart" placement="top-start">
                     <Icon
                       as={DeleteIcon}
@@ -842,7 +1072,7 @@ const handleGenreMarketShareClick = (genre) => {
                       color={'white'}
                       _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
                       sx={{ marginLeft: '10px' }}
-                      onClick={() => {setSelectedGCGenres([]); setGenreComplexityData([]);}}
+                      onClick={() => {setSelectedGCGenres([]); setGenreComplexityData([]); setSelectedGCGrouping([]);}}
                     />
                 </Tooltip>
                 <Tooltip label="Find genre complexity metric for selected genres" placement="top-start" >

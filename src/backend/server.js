@@ -94,16 +94,18 @@ const getDiversity = async (genre) => {
   }
 }
 
-const getGenreComplexities = async (genre) => {
+// gets GC, computed daily
+const getGenreComplexitiesDly = async (genre) => {
   // console.log('executing getGenreComplexities with genre:', genre);
   let conn;
   try {
     conn = await oracledb.getConnection(config);
 
     const sql = `
-      WITH mgt(id, name, m_cplx, genre, theme_count, rating, rdate, genre_count, rn) AS (
+      WITH mgt(id, name, m_cplx, genre, theme_count, rating, rdate, genre_count, rn, rk) AS (
         SELECT m.id, m.name, (t.tc * (m.rating / 5)), g.genre, t.tc, m.rating, r.rdate, gc.gc,
-        ROW_NUMBER() OVER (PARTITION BY g.genre ORDER BY r.rdate DESC) AS rn
+        ROW_NUMBER() OVER (ORDER BY r.rdate DESC) AS rn,
+        RANK() OVER (ORDER BY r.rdate DESC) AS rk
         FROM jeremymartin.movies m 
         JOIN (
             SELECT DISTINCT id, MIN(rdate) AS rdate
@@ -113,6 +115,7 @@ const getGenreComplexities = async (genre) => {
         JOIN (
             SELECT DISTINCT id, genre
             FROM jeremymartin.genres 
+            WHERE genre = :genre
             GROUP BY id, genre
         ) g ON m.id = g.id
         JOIN (
@@ -133,24 +136,159 @@ const getGenreComplexities = async (genre) => {
         WHERE rn = 1
         UNION ALL
         SELECT m.name, m.rdate, m.genre, m.m_cplx, m.rn, 
-        (2/m.rn)*(m.m_cplx - e.g_cplx) + e.g_cplx 
+        (2/m.rk)*(m.m_cplx - e.g_cplx) + e.g_cplx 
         FROM mgt m, ema e 
         WHERE m.rn = e.rn + 1 AND m.genre = e.genre
     )
     SELECT name, rdate, genre, m_cplx, g_cplx
     FROM ema
-    WHERE genre = :genre
     ORDER BY rdate DESC
           `;
 
     const result = await conn.execute(sql, [genre], { outFormat: oracledb.OUT_FORMAT_OBJECT });
-    // console.log('Result:', result);
     return result.rows.map(row => ({
       genre: row.GENRE,
       rdate: row.RDATE,
       movie: row.NAME,
       movie_complexity: row.M_CPLX,
       genre_complexity: row.G_CPLX
+    }));
+  } catch (err) {
+    console.error('Error executing query:', err);
+    throw err;
+  } finally {
+    if (conn) {
+      await conn.close();
+    }
+  }
+}
+
+// gets GC, computed monthly
+const getGenreComplexitiesMty = async (genre) => {
+  // console.log('executing getGenreComplexities with genre:', genre);
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
+
+    const sql = `
+      WITH mgt(id, name, mcplx, theme_count, rating, ryear, rmth, genre) AS (
+        SELECT m.id, m.name, (t.tc * (m.rating / 5)), t.tc, m.rating, EXTRACT(YEAR FROM rdate), EXTRACT(MONTH FROM rdate), g.genre
+        FROM jeremymartin.movies m 
+        JOIN (
+            SELECT DISTINCT id, MIN(rdate) AS rdate
+            FROM jeremymartin.releases 
+            GROUP BY id
+        ) r ON m.id = r.id
+        JOIN (
+            SELECT DISTINCT id, genre
+            FROM jeremymartin.genres 
+            WHERE genre = :genre
+            GROUP BY id, genre
+        ) g ON m.id = g.id
+        JOIN (
+            SELECT  id, COUNT(DISTINCT theme) AS tc
+            FROM jeremymartin.themes
+            GROUP BY id
+        ) t on m.id = t.id
+        WHERE m.rating IS NOT NULL 
+        AND t.tc IS NOT NULL
+      ), 
+      aggmgt (genre, ryear, rmth, amc, rn, rk) AS (
+          SELECT genre, ryear, rmth, AVG(mcplx), 
+              ROW_NUMBER() OVER (ORDER BY ryear DESC, rmth DESC) AS rn, 
+              RANK() OVER (ORDER BY ryear DESC, rmth DESC) AS rk
+          FROM mgt
+          GROUP BY ryear, rmth, genre
+      ),
+      ema (genre, ryear, rmth, amc, rn, agc) AS (
+          SELECT genre, ryear, rmth, amc, rn, amc 
+          FROM aggmgt 
+          WHERE rn = 1
+          UNION ALL
+          SELECT m.genre, m.ryear, m.rmth, m.amc, m.rn, 
+          (2/m.rk)*(m.amc - e.agc) + e.agc 
+          FROM aggmgt m, ema e 
+          WHERE m.rn = e.rn + 1 
+      )
+      SELECT genre, TO_DATE(LPAD(rmth, 2, '0') || ryear, 'MMYYYY') AS rdate, amc, agc
+      FROM ema
+      ORDER BY rdate DESC
+          `;
+
+    const result = await conn.execute(sql, [genre], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    return result.rows.map(row => ({
+      genre: row.GENRE,
+      rdate: row.RDATE,
+      movie_complexity: row.AMC,
+      genre_complexity: row.AGC
+    }));
+  } catch (err) {
+    console.error('Error executing query:', err);
+    throw err;
+  } finally {
+    if (conn) {
+      await conn.close();
+    }
+  }
+}
+// gets GC, computed yearly, for any number of years
+const getGenreComplexitiesYrly = async (genre, years) => {
+  // console.log('executing getGenreComplexities with genre:', genre);
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
+
+    const sql = `
+      WITH mgt(id, name, mcplx, theme_count, rating, ryear, genre) AS (
+        SELECT m.id, m.name, (t.tc * (m.rating / 5)), t.tc, m.rating, EXTRACT(YEAR FROM rdate), g.genre
+        FROM jeremymartin.movies m 
+        JOIN (
+            SELECT DISTINCT id, MIN(rdate) AS rdate
+            FROM jeremymartin.releases 
+            GROUP BY id
+        ) r ON m.id = r.id
+        JOIN (
+            SELECT DISTINCT id, genre
+            FROM jeremymartin.genres 
+            WHERE genre = :genre
+            GROUP BY id, genre
+        ) g ON m.id = g.id
+        JOIN (
+            SELECT  id, COUNT(DISTINCT theme) AS tc
+            FROM jeremymartin.themes
+            GROUP BY id
+        ) t on m.id = t.id
+        WHERE m.rating IS NOT NULL 
+        AND t.tc IS NOT NULL
+      ), 
+      aggmgt (genre, ryear, amc, rn, rk) AS (
+          SELECT genre, ryear, AVG(mcplx), 
+              ROW_NUMBER() OVER (ORDER BY TRUNC(ryear / :years) * :years DESC) AS rn, 
+              RANK() OVER (ORDER BY TRUNC(ryear / 1) * 1 DESC) AS rk
+          FROM mgt
+          GROUP BY ryear, genre
+      ),
+      ema (genre, ryear, amc, rn, agc) AS (
+          SELECT genre, ryear, amc, rn, amc 
+          FROM aggmgt 
+          WHERE rn = 1
+          UNION ALL
+          SELECT m.genre, m.ryear, m.amc, m.rn, 
+          (2/m.rk)*(m.amc - e.agc) + e.agc 
+          FROM aggmgt m, ema e 
+          WHERE m.rn = e.rn + 1 
+      )
+      SELECT genre, ryear, amc, agc
+      FROM ema
+      ORDER BY ryear DESC
+          `;
+
+    const result = await conn.execute(sql, { genre, years }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    return result.rows.map(row => ({
+      genre: row.GENRE,
+      rdate: row.RYEAR,
+      movie_complexity: row.AMC,
+      genre_complexity: row.AGC
     }));
   } catch (err) {
     console.error('Error executing query:', err);
@@ -378,11 +516,33 @@ app.get('/get-diversity/:genre', async (req, res) => {
 app.get('/get-genre-complexity/:genre', async (req, res) => {
   console.log('req.params:', req.params);
   const { genre } = req.params;
-  // console.log('genre:', genre);
 
   try {
-    const GCData = await getGenreComplexities(genre);
-    // console.log('GCData:', GCData);
+    const GCData = await getGenreComplexitiesDly(genre);
+    res.json(GCData); // Send the movie data back to the frontend
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/get-genre-complexity-monthly/:genre', async (req, res) => {
+  console.log('req.params:', req.params);
+  const { genre } = req.params;
+
+  try {
+    const GCData = await getGenreComplexitiesMty(genre);
+    res.json(GCData); // Send the movie data back to the frontend
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/get-genre-complexity-yearly/:genre/:years', async (req, res) => {
+  console.log('req.params:', req.params);
+  const { genre, years } = req.params;
+
+  try {
+    const GCData = await getGenreComplexitiesYrly(genre, years);
     res.json(GCData); // Send the movie data back to the frontend
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
