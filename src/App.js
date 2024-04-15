@@ -1188,7 +1188,7 @@ const handleGenreMarketShareClick = (genre) => {
                       color={'white'}
                       _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
                       sx={{ marginLeft: '10px' }}
-                      onClick={() => {setSelectedGCGenres([]); setGenreComplexityData([]); setSelectedCountry('');}}
+                      onClick={() => {setSelectedMSGenres([]); setGenreMSData([]); setSelectedCountry('');}}
                     />
                 </Tooltip>
                 <Tooltip label="Find market share for selected genres" placement="top-start" >
