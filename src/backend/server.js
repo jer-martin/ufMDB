@@ -463,6 +463,137 @@ app.get('/get-movie-popularity/:movieId', async (req, res) => {
   }
 });
 
+const getAverageRolePercentage = async (roleName) => {
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
+
+    const sql = `
+    SELECT 
+    EXTRACT(MONTH FROM release_date) AS month,
+    EXTRACT(YEAR FROM release_date) AS year,
+    AVG(role_percentage) AS average_role_percentage
+FROM (
+    SELECT
+        100.0 * COUNT(CASE WHEN c.role = :roleName THEN 1 END) / NULLIF(COUNT(*), 0) AS role_percentage,
+        c.id,
+        r.rdate as release_date
+    FROM crew c
+    JOIN releases r ON c.id = r.id
+    GROUP BY c.id, r.rdate
+)
+GROUP BY EXTRACT(MONTH FROM release_date), EXTRACT(YEAR FROM release_date)
+ORDER BY year, month`;
+
+    const result = await conn.execute(sql, [roleName], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+    if (result.rows.length > 0) {
+      const percentages = result.rows.map(row => ({
+        month: row.MONTH,
+        year: row.YEAR,
+        average_role_percentage: row.AVERAGE_ROLE_PERCENTAGE || 0,
+      }));
+      console.log('percentages:', percentages);
+      return percentages;
+    } else {
+      return null; // Or handle no data found case accordingly
+    }
+  } catch (err) {
+    console.error('Error executing query:', err);
+    return null; // Or handle error accordingly
+  } finally {
+    if (conn) {
+      await conn.close();
+    }
+  }
+};
+
+// this is literally just getting popularity
+const getMonthlyAveragePopularity = async () => {
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
+
+    const sql = `
+    SELECT 
+        EXTRACT(MONTH FROM rdate) AS month,
+        EXTRACT(YEAR FROM rdate) AS year,
+        AVG(popularity) AS average_popularity
+    FROM (
+        SELECT 
+            m.id AS movie_id,
+            m.name AS movie_name,
+            r.rdate,
+            (COUNT(r.id) + (2 * m.rating)) AS popularity
+        FROM 
+            movies m
+        LEFT JOIN 
+            releases r ON m.id = r.id
+        GROUP BY 
+            m.id, m.name, m.rating, r.rdate
+    ) t
+    WHERE
+        popularity IS NOT NULL
+    GROUP BY 
+        EXTRACT(MONTH FROM rdate), EXTRACT(YEAR FROM rdate)
+    ORDER BY 
+        year, month`;
+
+    const result = await conn.execute(sql, [], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+    if (result.rows.length > 0) {
+      const monthlyPopularity = result.rows.map(row => ({
+        month: row.MONTH,
+        year: row.YEAR,
+        popularity: ((row.AVERAGE_POPULARITY - 3.38) / (164.7 - 3.38)) * 10
+      }));
+      console.log('monthlyPopularity:', monthlyPopularity);
+      return monthlyPopularity;
+    } else {
+      return null; // Or handle no data found case accordingly
+    }
+  } catch (err) {
+    console.error('Error executing query:', err);
+    return null; // Or handle error accordingly
+  } finally {
+    if (conn) {
+      await conn.close();
+    }
+  }
+};
+
+app.get('/get-role-importance/:roleName', async (req, res) => {
+  const { roleName } = req.params;
+
+  try {
+    const roleImportanceData = await getRoleImportance(roleName);
+    console.log('roleImportanceData:', roleImportanceData);
+    res.json(roleImportanceData); // Send the role importance data back to the frontend
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+const getRoleImportance = async (roleName) => {
+  const avgRolePercentage = await getAverageRolePercentage(roleName);
+  const monthlyAvgPopularity = await getMonthlyAveragePopularity();
+
+  const roleImportanceData = monthlyAvgPopularity.map((data) => {
+    const { month, year, popularity } = data;
+    const rolePercentage = avgRolePercentage.find((role) => role.year === year && role.month === month);
+    const importanceScore = rolePercentage ? rolePercentage.average_role_percentage * popularity : 0;
+    
+
+    return {
+      month,
+      year,
+      importanceScore,
+    };
+  });
+
+  return roleImportanceData;
+};
+
 
  
   
