@@ -94,6 +94,115 @@ const getDiversity = async (genre) => {
   }
 }
 
+
+const getVeteranCrewImpact = async (role, minYearsInIndustry, minMovieCount) => {
+  console.log('executing getVeteranCrewImpact with crew:', role);
+  let conn;
+  try {
+    conn = await oracledb.getConnection(config);
+
+    const sql = `
+    WITH VeteranCrew AS
+    (
+    SELECT c.Name, c.role, MAX(m.year) - MIN(m.year) AS YearsInIndustry, COUNT( * ) AS MovieCount
+    FROM jeremymartin.crew c
+    JOIN jeremymartin.movies m ON m.ID = c.ID
+    WHERE 
+        m.Year IS NOT NULL AND
+        c.role = :role --variable
+    GROUP BY c.Name, c.role
+    HAVING (MAX(m.year) - MIN(m.year)) > :minYearsInIndustry AND COUNT( * ) > :minMovieCount
+    ORDER BY MAX(m.year) - MIN(m.year) DESC
+    ),
+    MoviesWithVeteran AS
+    (
+    SELECT DISTINCT
+        c.ID,
+        m.year,
+        m.rating
+    FROM 
+        jeremymartin.crew c,
+        VeteranCrew vc,
+        jeremymartin.movies m
+    WHERE c.Name = vc.Name AND c.role = vc.Role AND m.id = c.ID AND m.rating IS NOT NULL
+    ORDER BY m.year DESC
+    ),
+    MoviesWithoutVeteran AS
+    (
+        SELECT
+                c.ID,
+                m.year,
+                m.rating
+        FROM jeremymartin.crew c
+        JOIN jeremymartin.movies m ON m.ID = c.ID
+        WHERE m.rating IS NOT NULL
+        MINUS
+        SELECT
+            mv.ID,
+            mv.year,
+            mv.rating
+        FROM MoviesWithVeteran mv
+    ),
+    VeteranMovieRatingsPerYear AS
+    (
+    SELECT 
+        mv.year,
+        ROUND(AVG(mv.rating),2) AS Average_Rating,
+        COUNT( * ) AS numMovies,
+        1 AS HasVeteran
+    FROM MoviesWithVeteran mv
+    GROUP BY mv.year
+    ORDER BY mv.year
+    ),
+    NonVeteranMovieRatingsPerYear AS
+    (
+    SELECT
+        mov.year,
+        ROUND(AVG(mov.rating),2) AS Average_Rating,
+        COUNT( * ) AS numMovies,
+        0 AS HasVeteran
+    FROM MoviesWithoutVeteran mov
+    GROUP BY mov.year
+    ORDER BY mov.year
+    )
+    
+    SELECT
+        v.year AS year,
+        v.numMovies AS Veteran_Movie_Count,
+        n.numMovies AS NonVeteran_Movie_Count,
+        v.Average_Rating AS VeteranAverageRating,
+        n.Average_Rating AS NonVeteranAverageRating,
+        v.Average_Rating - n.Average_Rating AS Rating_Differential
+    
+    FROM VeteranMovieRatingsPerYear v
+    JOIN NonVeteranMovieRatingsPerYear n ON v.year = n.year
+    ORDER BY v.year    
+          `;
+
+    const result = await conn.execute(sql, {
+      role: role,
+      minYearsInIndustry: minYearsInIndustry,
+      minMovieCount: minMovieCount
+    }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    return result.rows.map(row => ({
+      year: row.YEAR,
+      Veteran_Movie_Count: row.VETERAN_MOVIE_COUNT,
+      NonVeteran_Movie_Count: row.NONVETERAN_MOVIE_COUNT,
+      VeteranAverageRating: row.VETERANAVERAGERATING,
+      NonVeteranAverageRating: row.NONVETERANAVERAGERATING,
+      RatingDifferential: row.RATING_DIFFERENTIAL,
+      CrewRole: role
+    }));
+  } catch (err) {
+    console.error('Error executing query:', err);
+    throw err;
+  } finally {
+    if (conn) {
+      await conn.close();
+    }
+  }
+}
+
 // gets GC, computed daily
 const getGenreComplexitiesDly = async (genre) => {
   // console.log('executing getGenreComplexities with genre:', genre);
@@ -628,6 +737,23 @@ app.get('/api/test', async (req, res) => {
 
 
 // here are the important queries
+
+//Vetquery Muneeb
+
+app.get('/get-vetcrew/:role/:minYearsInIndustry/:minMovieCount', async (req, res) => {
+  console.log('req.params:', req.params);
+  const { role, minYearsInIndustry, minMovieCount } = req.params;
+  console.log('role:', role);
+  console.log('minYearsInIndustry:', minYearsInIndustry);
+  console.log('minMovieCount:', minMovieCount);
+
+  try {
+    const VeteranData = await getVeteranCrewImpact(role, minYearsInIndustry, minMovieCount);
+    res.json(VeteranData); // Send the data back to the frontend
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // vedic first
 

@@ -352,6 +352,76 @@ const optionsMS = {
   }
 };
 
+
+const optionsVet = {
+  responsive: true,
+  animations: false,  // Disable all animations
+  scales: {
+    x: {
+      type: 'time',
+      time: {
+        unit: 'year',
+        parser: 'yyyy',
+        tooltipFormat: 'yyyy',
+        displayFormats: {
+          year: 'yyyy'
+        }
+      },
+      title: {
+        display: true,
+        text: 'Year',
+        color: '#bfbfbf'  // Light grey color for better visibility on dark backgrounds
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
+      }
+    },
+    y: {
+      beginAtZero: false,
+      min: -1,
+      max:1,
+      title: {
+        display: true,
+        text: 'Average Value',
+        color: '#bfbfbf'  // Light grey color
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
+      }
+    }
+  },
+  plugins: {
+    legend: {
+      display: true,
+      labels: {
+        color: 'grey'  // Light grey color for the legend text
+      }
+    },
+    tooltip: {
+      enabled: true,
+      mode: 'index',
+      intersect: false,
+      bodyColor: 'grey',  // Light grey color for the tooltip text
+      titleColor: 'grey'  // Light grey color for the tooltip title
+    },
+    zoom: {
+      pan: {
+        enabled: true,
+        mode: 'xy'
+      },
+      zoom: {
+        wheel: {
+          enabled: true
+        },
+        pinch: {
+          enabled: true
+        },
+        mode: 'xy'
+      }
+    }
+  }
+};
+
 const optionsImportance = {
   responsive: true,
   animations: false,  // Disable all animations
@@ -509,6 +579,28 @@ const createMSChartData = (MSData, selectedMSGenres) => {
   };
 };
 
+
+const createVetData = (crewData) => {
+  const datasets = crewData.map((crewArray, index) => {
+    // console.log("crewArray[0]:  \n", crewArray[0].CrewRole)
+    const color = `hsl(${index * 360 / crewData.length}, 60%, 60%)`;
+    return {
+      label: crewArray[0].CrewRole,
+      data: crewArray.map(d => ({
+        x: new Date(d.year, 0), // Convert year to Date object
+        y: d.RatingDifferential,
+      })),
+      borderColor: color,
+      backgroundColor: color,
+      tension: 0.4
+    };
+  });
+  // console.log("Datasets: ", datasets);
+  return {
+    datasets,
+  };
+};
+
 const createImportanceChartData = (roleImportanceData, selectedRoles) => {
   const movingAveragePeriod = 6; // This is an example; adjust as needed for smoothing
 
@@ -570,6 +662,9 @@ function App() {
   const [genrePercentages, setGenrePercentages] = useState([]);
   const [selectedDiversityGenres, setSelectedDiversityGenres] = useState([]);
   const [selectedGCGenres, setSelectedGCGenres] = useState([]);
+  const [selectedVetRoles, setSelectedVetRoles] = useState([]);
+  const [minYearsInIndustry, setMinYearsInIndustry] = useState('');
+  const [minMovieCount, setMinMovieCount] = useState('');
   const [selectedGCGrouping, setSelectedGCGrouping] = useState([]);
   const [GCGrouping, setGCGrouping] = useState([]);
   const [selectedMSGenres, setSelectedMSGenres] = useState([]);
@@ -578,9 +673,11 @@ function App() {
   const [isLoadingDiversity, setIsLoadingDiversity] = useState(false);
   const [isLoadingGC, setIsLoadingGC] = useState(false);
   const [isLoadingMS, setIsLoadingMS] = useState(false);
+  const [isLoadingVet, setIsLoadingVet] = useState(false);
   const [diversityGenreData, setDiversityGenreData] = useState([]);
   const [genreComplexityData, setGenreComplexityData] = useState([]);
   const [MSData, setGenreMSData] = useState([]);
+  const [VetData, setVetData] = useState([]);
   const [roleImportanceData, setRoleImportanceData] = useState([]);
   const [isLoadingImportance, setIsLoadingImportance] = useState(false);
   const [importanceError, setImportanceError] = useState(null);
@@ -630,6 +727,8 @@ function App() {
   const displaySelectedCountry = selectedCountry || 'Select a Country';
 
   const displaySelectedMSGenres = selectedMSGenres.length > 0 ? selectedMSGenres.join(', ') : 'Select Genres';
+
+  const displaySelectedVetRoles = selectedVetRoles.length > 0 ? selectedVetRoles.join(', ') : 'Select Roles';
 
   const handleRoleClick = (role) => {
     setSelectedRoles(prev => {
@@ -683,6 +782,19 @@ const handleGenreMarketShareClick = (genre) => {
     }
   });
 };
+
+const handleVetCrewImpactClick = (role) => {
+  setSelectedVetRoles(prevRoles => {
+    if (prevRoles.includes(role)) {
+      // If the genre is already selected, remove it from the array
+      return prevRoles.filter(r => r !== role);
+    } else {
+      // If the genre is not selected, add it to the array
+      return [...prevRoles, role];
+    }
+  });
+};
+
 
 const handleRoleImportanceClick = async (roleName) => {
   setIsLoadingImportance(true);
@@ -881,14 +993,48 @@ const handleMultipleRolesImportance = async () => {
     const genrePromises = selectedMSGenres.map(genre => handleMarketShare(genre));
     try {
       const results = await Promise.all(genrePromises);
-      console.log('Results:', results);
+      // console.log('Results:', results);
       setGenreMSData(results);
       setIsLoadingMS(false);
     } catch (error) {
       console.error('Error fetching data for multiple genres:', error);
     }
   };
+  const handleVetCrewRole = async (roleName) => {
+    const role = `${encodeURIComponent(roleName)}`;
+    const url = `/get-vetcrew/${role}/${minYearsInIndustry}/${minMovieCount}`;
+    try {
+      setIsLoadingVet(true);
+      console.log('Fetching URL:', url);
+      const response = await fetch(url);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching market share:', error);
+    }
+  }
+
+  const handleMultipleRolesVetCrewImpact = async () => {
+    const rolePromises = selectedVetRoles.map(role => handleVetCrewRole(role));
+    try {
+      const results = await Promise.all(rolePromises);
+      // console.log('Results:', results);
+      setVetData(results);
+      setIsLoadingVet(false);
+    } catch (error) {
+      console.error('Error fetching data for multiple roles:', error);
+    }
+  };
   
+  const handleMinYearsChange = (event) => {
+
+    setMinYearsInIndustry(event.target.value);
+    
+  };
+
+  const handleMinMovieCountChange = (event) => {
+    setMinMovieCount(event.target.value);
+  };
 
 
   
@@ -917,6 +1063,14 @@ const handleMultipleRolesImportance = async () => {
     return <Line data={chartData} options={optionsMS} />;
   };
   
+  const VetChart = ({ VetData, selectedRoles }) => {
+    // console.log("VetData: ", VetData)
+    // console.log("selectedRoles: ", selectedRoles)
+    const chartData = createVetData(VetData);
+  
+    return <Line data={chartData} options={optionsVet} />;
+  };
+
 
   const ImportanceChart = ({ roleData }) => {
     const chartData = createImportanceChartData(roleData, selectedRoles);
@@ -1386,6 +1540,126 @@ const handleMultipleRolesImportance = async () => {
   )}
 </Flex>
 
+          
+          
+          <Divider orientation="horizontal" mt="4" width={'30%'} />
+          <Flex direction="column" alignItems="center" mt="4">
+
+              <Flex direction="row" alignItems="center" justifyContent="center">
+                  <Box w={'auto'} h={'auto'}>
+                    <Text fontSize="md" color={'white'}>What impact does the presence of veteran crew members have on the movie's reception over time?</Text>
+                    <Text fontSize="xs" color={'grey'}>Choose a role to observe, a minimum threshold of years in industry, and a minimum threshold of movies worked on.</Text>
+                  </Box>
+                  <Tooltip 
+                  label={
+                    <>
+                      <Box as="p" mb="2">
+                        <Box as="span" fontWeight="bold" color="lightpink">Rating Differential: </Box> 
+                        A value that quantifies the level of impact they had. A positive value indicates they increased ratings while negative indicates they decreased it.
+                      </Box>
+                    </>
+                  } 
+                  placement="top-start">
+                    <Icon
+                      as={QuestionIcon}
+                      w={5}
+                      h={5}
+                      color={'white'}
+                      _hover={{transform: 'scale(1.2)', color: 'LightBlue'}}
+                      sx={{ marginLeft: '10px' }}
+                      onClick={() => setSelectedVetRoles([])}
+                    />
+                  </Tooltip>
+              </Flex>
+              
+              <Box w={4} h={3} /> {/* Spacer */}
+
+              <Flex direction="row" alignItems="center" justifyContent="center">
+                <Menu>
+                    <MenuButton
+                      as={Button}
+                      rightIcon={<ChevronDownIcon />}
+                      width="auto"
+                      minWidth="240px"
+                    >
+                      {displaySelectedVetRoles}
+                    </MenuButton>
+                  <MenuList sx={{ maxHeight: '200px', overflowY: 'auto' }}>
+                    {roles.map(role => (
+                      <MenuItem
+                        key={role}
+                        onClick={() => handleVetCrewImpactClick(role)}
+                        sx={{ color: 'black', fontSize: '12pt' }}
+                        background={selectedVetRoles.includes(role) ? 'gray.200' : 'white'}
+                        closeOnSelect={false}
+                        _hover={{ background: selectedVetRoles.includes(role) ? 'gray.300' : 'gray.100' }}
+                      >
+                        {role}
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </Menu>
+                <Box w={4} h={3} /> {/* Spacer */}
+
+                {/* Input for minYearsInIndustry */}
+                <Input
+                  type="number"
+                  placeholder="Min. Years in Industry"
+                  value={minYearsInIndustry}
+                  onChange={handleMinYearsChange}
+                  sx={{ marginRight: '10px' }}
+                />
+
+                      {/* Input for minMovieCount */}
+                <Input
+                  type="number"
+                  placeholder="Min. Movie Count"
+                  value={minMovieCount}
+                  onChange={handleMinMovieCountChange}
+                  sx={{ marginRight: '10px' }}
+                />
+
+                <Tooltip label="Clear selected Roles, minimum thresholds and remove currently loaded chart" placement="top-start">
+                    <Icon
+                      as={DeleteIcon}
+                      w={5}
+                      h={5}
+                      color={'white'}
+                      _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
+                      sx={{ marginLeft: '10px' }}
+                      onClick={() => {setSelectedVetRoles([]); setVetData([]); setMinMovieCount([]); setMinYearsInIndustry([]);}}
+                    />
+                </Tooltip>
+                <Tooltip label="Find veteran crew impact for selected roles and veteran thresholds." placement="top-start" >
+                    <Icon
+                      as={isLoadingVet ? SpinnerIcon : CheckCircleIcon}
+                      w={5}
+                      h={5}
+                      color={hasError ? 'IndianRed' : 'white'}
+                      _hover={{ color: 'LightGreen', transform: 'scale(1.2)' }}
+                      sx={{
+                        marginLeft: '10px',
+                        animation: hasError ? `${shake} 0.82s cubic-bezier(.36,.07,.19,.97) both` : (isLoadingMS ? `${rotate} 1s linear infinite` : 'none'),
+                        _hover: {
+                            color: hasError ? 'IndianRed' : (isLoadingVet ? 'white' : 'LightGreen'),  // Conditional hover color
+                            transform: 'scale(1.2)'
+                        }
+                      }}
+                      onClick={() => handleMultipleRolesVetCrewImpact()}
+                    />
+                </Tooltip>
+              </Flex>
+
+
+
+
+          </Flex>
+
+          <Flex direction="column" alignItems="center" mt="4" style={{ width: '800px', height: '400px'}}>
+            {VetData && VetData.length > 0 && (
+              <VetChart VetData={VetData} selectedRoles={selectedVetRoles} />
+            )}
+          </Flex>
 
       </div>
 
