@@ -422,15 +422,87 @@ const optionsVet = {
   }
 };
 
+const optionsImportance = {
+  responsive: true,
+  animations: false,  // Disable all animations
+  scales: {
+    x: {
+      type: 'time',
+      time: {
+        unit: 'month',
+        parser: 'yyyy-MM',
+        tooltipFormat: 'MMMM yyyy', // Changed from YYYY to yyyy
+        displayFormats: {
+          month: 'MMM yyyy', // Changed from YYYY to yyyy
+          year: 'yyyy'
+        }
+      },
+      title: {
+        display: true,
+        text: 'Date',
+        color: '#bfbfbf'  // Light grey color for better visibility on dark backgrounds
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
+      }
+    },
+    y: {
+      beginAtZero: true,
+      title: {
+        display: true,
+        text: 'Importance Score',
+        color: '#bfbfbf'  // Light grey color
+      },
+      ticks: {
+        color: 'grey'  // Light grey color for the axis labels
+      }
+    }
+  },
+  plugins: {
+    legend: {
+      display: true,
+      labels: {
+        color: 'grey'  // Light grey color for the legend text
+      }
+    },
+    tooltip: {
+      enabled: true,
+      mode: 'index',
+      intersect: false,
+      bodyColor: 'grey',  // Light grey color for the tooltip text
+      titleColor: 'grey'  // Light grey color for the tooltip title
+    },
+    zoom: {
+      pan: {
+        enabled: true,
+        mode: 'xy'
+      },
+      zoom: {
+        wheel: {
+          enabled: true,
+        },
+        pinch: {
+          enabled: true,
+        },
+        mode: 'xy'
+      }
+    }
+  }
+};
+
 const createDiversityChartData = (genreData) => {
   const datasets = genreData.map((genreArray, index) => {
     // console.log("genreArray[0]:  \n", genreArray[0])
     const color = `hsl(${index * 360 / genreData.length}, 60%, 60%)`;
+    const weightForLanguages = 0.4; // 40% weight
+    const weightForRating = 0.6; // 60% weight
+    const maxLanguages = 21; // maximum value for normalization
+    const maxRating = 5; // maximum value for normalization
     return {
       label: genreArray[0].genre,
       data: genreArray.map(d => ({
         x: new Date(d.year.toString()), // Convert year to Date object
-        y: (d.avgNumLanguages + d.avgRating) / 2,
+        y: (Math.log(d.avgNumLanguages + 1) + d.avgRating) / 2,
       })),
       borderColor: color,
       backgroundColor: color,
@@ -529,6 +601,56 @@ const createVetData = (crewData) => {
   };
 };
 
+const createImportanceChartData = (roleImportanceData, selectedRoles) => {
+  const movingAveragePeriod = 6; // This is an example; adjust as needed for smoothing
+
+  const datasets = roleImportanceData.map((dataForOneRole, index) => {
+    const roleName = selectedRoles[index];
+    const color = `hsl(${index * 360 / roleImportanceData.length}, 60%, 60%)`;
+
+    // Sort the data by year and month before mapping to chart data
+    const sortedData = dataForOneRole.sort((a, b) => {
+      const dateA = new Date(a.year, a.month - 1);
+      const dateB = new Date(b.year, b.month - 1);
+      return dateA - dateB;
+    });
+
+    // Calculate the moving average for the importance score
+    const smoothedData = sortedData.map((item, idx, arr) => {
+      let sum = 0;
+      let count = 0;
+      for (let i = -Math.floor(movingAveragePeriod / 2); i <= Math.floor(movingAveragePeriod / 2); i++) {
+        const neighborIdx = idx + i;
+        if (neighborIdx >= 0 && neighborIdx < arr.length) {
+          sum += arr[neighborIdx].importanceScore;
+          count++;
+        }
+      }
+      const average = sum / count;
+      return {
+        ...item,
+        importanceScore: average
+      };
+    });
+
+    return {
+      label: roleName,
+      data: smoothedData.map(item => ({
+        x: new Date(item.year, item.month - 1), // Continue using the adjusted date object
+        y: item.importanceScore
+      })),
+      borderColor: color,
+      backgroundColor: color,
+      tension: 0.4
+    };
+  });
+
+  return {
+    datasets,
+  };
+};
+
+
 
 function App() {
   const [formData, setFormData] = useState({
@@ -556,6 +678,9 @@ function App() {
   const [genreComplexityData, setGenreComplexityData] = useState([]);
   const [MSData, setGenreMSData] = useState([]);
   const [VetData, setVetData] = useState([]);
+  const [roleImportanceData, setRoleImportanceData] = useState([]);
+  const [isLoadingImportance, setIsLoadingImportance] = useState(false);
+  const [importanceError, setImportanceError] = useState(null);
   
   
   
@@ -607,17 +732,13 @@ function App() {
 
   const handleRoleClick = (role) => {
     setSelectedRoles(prev => {
+        // Check if the role is already selected
         const isAlreadySelected = prev.includes(role);
         if (isAlreadySelected) {
-            // Find index of the role to remove it and its corresponding percentage
-            const index = prev.indexOf(role);
-            setRolePercentages(prevPercentages => prevPercentages.filter((_, i) => i !== index));
+            // If the role is already selected, remove it from the list
             return prev.filter(r => r !== role);
         } else {
-            // Add new role and fetch its percentage
-            fetchAverageRolePercentage(role).then(percentage => {
-                setRolePercentages(prevPercentages => [...prevPercentages, percentage]);
-            });
+            // If the role is not selected, add it to the list
             return [...prev, role];
         }
     });
@@ -675,6 +796,31 @@ const handleVetCrewImpactClick = (role) => {
 };
 
 
+const handleRoleImportanceClick = async (roleName) => {
+  setIsLoadingImportance(true);
+  setImportanceError(null);
+  try {
+    const response = await fetch(`/get-role-importance/${encodeURIComponent(roleName)}`);
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching role importance:', error);
+    setImportanceError(error.message);
+  } finally {
+    setIsLoadingImportance(false);
+  }
+};
+
+const handleMultipleRolesImportance = async () => {
+  const importancePromises = selectedRoles.map(role => handleRoleImportanceClick(role));
+  try {
+    const results = await Promise.all(importancePromises);
+    setRoleImportanceData(results);
+  } catch (error) {
+    console.error('Error fetching data for multiple roles:', error);
+  }
+};
+
 
 
   const onRoleSelect = useCallback((selectedRoles) => {
@@ -713,6 +859,17 @@ const handleVetCrewImpactClick = (role) => {
     } catch (error) {
       console.error('Error fetching average role percentage:', error);
       return null;
+    }
+  };
+
+  const fetchRoleImportanceData = async (roleName) => {
+    try {
+      const response = await fetch(`/get-role-importance/${encodeURIComponent(roleName)}`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Fetch error:', error);
+      throw error;
     }
   };
 
@@ -915,109 +1072,20 @@ const handleVetCrewImpactClick = (role) => {
   };
 
 
-
+  const ImportanceChart = ({ roleData }) => {
+    const chartData = createImportanceChartData(roleData, selectedRoles);
+  
+    return <Line data={chartData} options={optionsImportance} />;
+  };
   
   return (
     <div className="App">
         <Nav />
       <div className='App-area'>
-        <Flex direction="row" alignItems="center" justifyContent="center">
-          <Menu>
-            <MenuButton
-              as={Button}
-              rightIcon={<ChevronDownIcon />}
-              width="auto"
-              minWidth="240px"
-            >
-              {displaySelectedRoles}
-            </MenuButton>
-            <MenuList sx={{ maxHeight: '200px', overflowY: 'auto' }}>
-              {roles.map(role => (
-                <MenuItem
-                  key={role}
-                  onClick={() => handleRoleClick(role)}
-                  sx={{ color: 'black', fontSize: '12pt' }}
-                  background={selectedRoles.includes(role) ? 'gray.200' : 'white'}
-                  closeOnSelect={false}
-                  _hover={{ background: selectedRoles.includes(role) ? 'gray.300' : 'gray.100' }}
-                >
-                  {role}
-                </MenuItem>
-              ))}
-            </MenuList>
-          </Menu>
-          <Tooltip label="Clear all selected roles" placement="top-start">
-            <Icon
-              as={DeleteIcon}
-              w={5}
-              h={5}
-              color={'white'}
-              _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
-              sx={{ marginLeft: '10px' }}
-              onClick={clearSelectedRoles}
-            />
-          </Tooltip>
+        
 
-          <Tooltip label="Find role percentage for selected roles" placement="top-start">
-            <Icon
-              as={CheckCircleIcon}
-              w={5}
-              h={5}
-              color={'white'}
-              _hover={{ color: 'LightGreen', transform: 'scale(1.2)' }}
-              sx={{ marginLeft: '10px' }}
-              onClick={() => handleMultipleRoles()}
-            />
-          </Tooltip>
-
-        </Flex>
 
         
-        
-        {rolePercentages && rolePercentages.length > 0 && (
-          <Flex direction="column" alignItems="center" mt="4">
-            {rolePercentages.map((percentage, index) => {
-              // Ensure 'percentage' is a number and not undefined
-              const formattedPercentage = typeof percentage === 'number' ? percentage.toFixed(2) : 'N/A';
-
-              return (
-                <Text key={index} fontSize="md">
-                  Percent of crew labelled "{selectedRoles[index]}" : {formattedPercentage}%
-                </Text>
-              );
-            })}
-          </Flex>
-        )}
-
-      <Text fontSize="xs" mt="4" color={'grey'}> If the percentage is N/A, click the checkmark.</Text>
-
-      <Divider orientation="horizontal" mt="4" width={'30%'} />
-
-        <Flex direction="column" alignItems="center" mt="4">
-          <Input
-            name="movieID"
-            placeholder="Enter a movie ID"
-            value={formData.movieID}
-            onChange={handleChange}
-            width="240px"
-            mb="4"
-          />
-          <Button
-            colorScheme="teal"
-            onClick={handlePopularityClick}
-          >
-            Get Movie Popularity
-          </Button>
-          {movieData && movieData.length > 0 && (
-            <Flex direction="column" alignItems="center" mt="4">
-              <Text fontSize="md">Movie ID: {movieData[0].movieId}</Text>
-              <Text fontSize="md">Movie Name: {movieData[0].movieName}</Text>
-              <Text fontSize="md">Popularity: {movieData[0].popularity.toFixed(2)}</Text>
-            </Flex>
-          )}
-        </Flex>
-
-      <Divider orientation="horizontal" mt="4" width={'30%'} />
 
         <Flex direction="column" alignItems="center" mt="4">
 
@@ -1048,7 +1116,6 @@ const handleVetCrewImpactClick = (role) => {
                     color={'white'}
                     _hover={{transform: 'scale(1.2)', color: 'LightBlue'}}
                     sx={{ marginLeft: '10px' }}
-                    onClick={() => setSelectedDiversityGenres([])}
                   />
                 </Tooltip>
             </Flex>
@@ -1375,6 +1442,103 @@ const handleVetCrewImpactClick = (role) => {
               <MSChart MSData={MSData} selectedGenres={selectedMSGenres} />
             )}
           </Flex>
+
+          <Divider orientation="horizontal" mt="4" width={'30%'} />
+
+          <Box w={4} h={3} /> {/* Spacer */}
+
+          <Flex direction="row" alignItems="center" justifyContent="center">
+                <Box w={'auto'} h={'auto'}>
+                  <Text fontSize="md" color={'white'}>What is the importance of each crew role over time?</Text>
+                  <Text fontSize="xs" color={'grey'}>Choose any number of roles to compare their importance!</Text>
+                </Box>
+                <Tooltip 
+                  label={
+                    <>
+                      <Box as="p" mb="2">
+                        <Box as="span" fontWeight="bold" color="lightpink">Importance: </Box> 
+                        calculated by looking at how often different crew roles are used in movies each month and considering the popularity of those movies, which helps show the significance of each role in successful movie productions.
+                      </Box>
+                      
+                    </>
+                  } 
+                  placement="top-start"
+                >
+                  <Icon
+                    as={QuestionIcon}
+                    w={5}
+                    h={5}
+                    color={'white'}
+                    _hover={{transform: 'scale(1.2)', color: 'LightBlue'}}
+                    sx={{ marginLeft: '10px' }}
+                  />
+                </Tooltip>
+            </Flex> 
+
+          <Box w={4} h={3} /> {/* Spacer */}
+
+          <Flex direction="row" alignItems="center" justifyContent="center">
+          <Menu>
+            <MenuButton
+              as={Button}
+              rightIcon={<ChevronDownIcon />}
+              width="auto"
+              minWidth="240px"
+            >
+              {displaySelectedRoles}
+            </MenuButton>
+            <MenuList sx={{ maxHeight: '200px', overflowY: 'auto' }}>
+              {roles.map(role => (
+                <MenuItem
+                  key={role}
+                  onClick={() => handleRoleClick(role)}
+                  sx={{ color: 'black', fontSize: '12pt' }}
+                  background={selectedRoles.includes(role) ? 'gray.200' : 'white'}
+                  closeOnSelect={false}
+                  _hover={{ background: selectedRoles.includes(role) ? 'gray.300' : 'gray.100' }}
+                >
+                  {role}
+                </MenuItem>
+              ))}
+            </MenuList>
+          </Menu>
+          <Tooltip label="Clear all selected roles" placement="top-start">
+            <Icon
+              as={DeleteIcon}
+              w={5}
+              h={5}
+              color={'white'}
+              _hover={{ color: 'LightCoral', transform: 'scale(1.2)' }}
+              sx={{ marginLeft: '10px' }}
+              onClick={clearSelectedRoles}
+            />
+          </Tooltip>
+
+          <Tooltip label="Find role importance for selected roles" placement="top-start">
+            <Icon
+                      as={isLoadingImportance ? SpinnerIcon : CheckCircleIcon}
+                      w={5}
+                      h={5}
+                      color={hasError ? 'IndianRed' : 'white'}
+                      _hover={{ color: 'LightGreen', transform: 'scale(1.2)' }}
+                      sx={{
+                        marginLeft: '10px',
+                        animation: hasError ? `${shake} 0.82s cubic-bezier(.36,.07,.19,.97) both` : (isLoadingImportance ? `${rotate} 1s linear infinite` : 'none'),
+                        _hover: {
+                            color: hasError ? 'IndianRed' : (isLoadingImportance ? 'white' : 'LightGreen'),  // Conditional hover color
+                            transform: 'scale(1.2)'
+                        }
+                      }}
+                      onClick={() => handleMultipleRolesImportance()}
+                    />
+          </Tooltip> 
+        </Flex>
+
+        <Flex direction="column" alignItems="center" mt="4" style={{ width: '800px', height: '400px'}}>
+  {roleImportanceData.length > 0 && (
+    <ImportanceChart roleData={roleImportanceData} />
+  )}
+</Flex>
 
           
           
