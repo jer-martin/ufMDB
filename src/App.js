@@ -1548,7 +1548,7 @@ const handleMultipleRolesImportance = async () => {
               <Flex direction="row" alignItems="center" justifyContent="center">
                   <Box w={'auto'} h={'auto'}>
                     <Text fontSize="md" color={'white'}>What impact does the presence of veteran crew members have on the movie's reception over time?</Text>
-                    <Text fontSize="xs" color={'grey'}>Choose a role to observe, a minimum threshold of years in industry, and a minimum threshold of years in industry.</Text>
+                    <Text fontSize="xs" color={'grey'}>Choose a role to observe, a minimum threshold of years in industry, and a minimum threshold of movies worked on.</Text>
                   </Box>
                   <Tooltip 
                   label={
